@@ -1,129 +1,739 @@
-# Newtonite Task Tracker 🚀
+# Newtonite Task Tracker 🌿
 
-> A production-grade, collaborative, multi-tenant operations task management web application built with Python and Django for the **Newtonite Software Engineering Challenge: Operations Under Pressure**.
+> **Production-Grade, Multi-Tenant Operations Work-Item Management Platform**  
+> Engineered with Python & Django for the **Newtonite Software Engineering Challenge: "Operations Under Pressure"**.
 
-![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.14-blue)
-![Django](https://img.shields.io/badge/Django-6.0-green)
-![Tests](https://img.shields.io/badge/Tests-61%20Passed%20(100%25)-success)
-![Architecture](https://img.shields.io/badge/Architecture-Modular%20Monolith-indigo)
-![Deployment](https://img.shields.io/badge/Deployment-Render%20Ready-brightgreen)
-
----
-
-## 1. Project Overview
-
-**Newtonite Task Tracker** is engineered to solve real-world high-pressure operations challenges:
-- **Canonical Unified Document Storage**: All new document uploads—whether initiated from task creation, the task detail page, or the team shared library—create a single canonical `SharedDocument` record and a single physical stored file. Backward compatibility is seamlessly preserved for legacy `TaskAttachment` records.
-- **In-App Only Team Invitations**: Completely in-app workflow with **zero outbound email delivery**. Invitations are targeted to registered Newtonite accounts, generate instant in-app notifications, and feature atomic POST-based accept/decline actions, expiration, revocation, and duplicate prevention.
-- **Persistent Unread Audit Indicator**: Live red indicator dot on the Audit Log navigation item driven by an immutable per-user database read cursor (`UserActivityReadState`), scoped to accessible teams, isolated from the Updates center, and protected against false-read clearing on filtered views.
-- **Prevent Lost Updates**: Multi-user optimistic concurrency control (OCC) prevents users from overwriting each other's edits with side-by-side diff conflict resolution.
-- **Deduplicate Submissions**: Idempotency token architecture ensures network retries and double clicks never create duplicate tasks.
-- **Team-Scoped RBAC & Anti-IDOR**: Strict team isolation guarantees users cannot access, view, or alter work items or documents from teams they do not belong to.
-- **Enforced Workflow Lifecycles**: Backend state-machine validates all status progressions (`OPEN` &rarr; `IN_PROGRESS` &rarr; `RESOLVED` &rarr; `OPEN`).
-- **Immutable Audit Logging**: Every state change, reassignment, priority shift, document upload, and membership change is recorded atomically.
-- **Premium Editorial Visual Identity**: Warm ivory (`#FDFBF7`), sage (`#5C8571`), deep forest green (`#285741`), custom botanical vector emblem (`leaf_emblem.svg`), architectural isometric hero artwork (`cityscape_art.svg`), and full dark mode.
+[![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![Django](https://img.shields.io/badge/Django-6.0%20%2F%205.1-092E20?style=for-the-badge&logo=django&logoColor=white)](https://djangoproject.com)
+[![Architecture](https://img.shields.io/badge/Architecture-Modular%20Monolith-4A5568?style=for-the-badge&logo=diagram-project&logoColor=white)](#2-system-architecture--design-patterns)
+[![Tests](https://img.shields.io/badge/Automated%20Tests-61%20Passed%20(100%25)-285741?style=for-the-badge&logo=pytest&logoColor=white)](#8-testing-strategy--verification-results)
+[![Coverage](https://img.shields.io/badge/Pytest%20Coverage-74%25-5C8571?style=for-the-badge&logo=codecov&logoColor=white)](#8-testing-strategy--verification-results)
+[![Render](https://img.shields.io/badge/Deployment-Render%20Ready-46E3B7?style=for-the-badge&logo=render&logoColor=black)](#10-render-production-deployment-guide)
+[![CI](https://img.shields.io/badge/GitHub%20Actions-Passing-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](.github/workflows/test.yml)
 
 ---
 
-## 2. Technology Stack
+## Executive Summary
 
-- **Backend**: Python 3.14 / 3.12, Django 6.0 (Modular Monolith)
-- **Database**: SQLite 3 (local development) / PostgreSQL (production Render via `DATABASE_URL` and `dj-database-url`)
-- **Production Asset Serving**: WhiteNoise 6.12 (`CompressedManifestStaticFilesStorage`)
-- **WSGI Production Server**: Gunicorn 21.2
-- **Frontend**: Django Templates, Semantic HTML5, Vanilla CSS Design System (`app.css`), Vanilla JavaScript (`app.js`)
-- **Typography**: Google Fonts (*Newsreader* editorial display serif, *Plus Jakarta Sans* UI, *Inter* tabular copy, *JetBrains Mono* code/version badges)
-- **Testing**: Pytest & Django Test Framework (61 automated tests, 100% pass rate in ~2.2s, 74% coverage)
-- **Continuous Integration**: GitHub Actions (`.github/workflows/test.yml`)
+**Newtonite Task Tracker** is an enterprise-ready, collaborative task and operations management platform designed to excel under real-world operational pressure: high concurrency, multi-user race conditions, network dropouts, multi-tenant security boundaries, and stringent compliance auditing.
+
+The system is built as a **Modular Django Monolith** with strict domain service separation, scoped role-based access control (RBAC), multi-user optimistic concurrency control (OCC), idempotent request handling, in-app invitation workflows, canonical unified document storage, and an immutable audit trail with field-level JSON state diffs.
 
 ---
 
-## 3. Quick Start (Windows Setup Guide)
+## Table of Contents
 
-### Step 1: System Checks
-```powershell
-py manage.py check
-```
-
-### Step 2: Run Database Migrations
-```powershell
-py manage.py migrate
-```
-
-### Step 3: Seed Showcase Demo Data (Idempotent)
-Populates realistic showcase users, teams, tasks, invitations, notifications, and shared documents:
-```powershell
-py manage.py seed_demo_data
-```
-
-### Step 4: Run Automated Tests (61/61 Passing)
-```powershell
-# Native Django Test Runner
-py manage.py test
-
-# Pytest with Coverage
-py -m pytest --cov=tasks --cov-report=term
-```
-
-### Step 5: Start Development Server
-```powershell
-py manage.py runserver 127.0.0.1:8000
-```
-Open **[http://127.0.0.1:8000/](http://127.0.0.1:8000/)** in your browser.
+1. [Key Features & Critical Behaviors](#1-key-features--critical-behaviors)
+2. [System Architecture & Design Patterns](#2-system-architecture--design-patterns)
+3. [Database Architecture & Model Inventory](#3-database-architecture--model-inventory)
+4. [Authentication, Authorization & Anti-IDOR Security](#4-authentication-authorization--anti-idor-security)
+5. [Core Workflows & Business Rules](#5-core-workflows--business-rules)
+6. [Design System & Frontend Architecture](#6-design-system--frontend-architecture)
+7. [Quick Start & Local Setup Guide](#7-quick-start--local-setup-guide)
+8. [Demonstration Accounts & Evaluator Credentials](#8-demonstration-accounts--evaluator-credentials)
+9. [Testing Strategy & Verification Results](#9-testing-strategy--verification-results)
+10. [Render Production Deployment Guide](#10-render-production-deployment-guide)
+11. [Architecture Decision Records (ADRs)](#11-architecture-decision-records-adrs)
+12. [Known Limitations & Production Roadmap](#12-known-limitations--production-roadmap)
+13. [Project Directory & File Inventory](#13-project-directory--file-inventory)
 
 ---
 
-## 4. Demo Accounts & Evaluator Credentials
+## 1. Key Features & Critical Behaviors
 
-All demonstration accounts share the password: `Password123!`
+Newtonite Task Tracker satisfies every requirement of the **Operations Under Pressure** challenge and implements ten distinct critical behaviors beyond standard CRUD operations:
 
-| Username | Role | Team Membership | Focus Area |
-| :--- | :--- | :--- | :--- |
-| **`alice`** | **Team Admin** | Core Platform | Team settings, member management, task creation, in-app invitations, shared document upload & deletion. |
-| **`bob`** | **Team Manager** | Core Platform (Manager), Frontend (Member) | Multi-team management, task assignments, document library access. |
-| **`charlie`** | **Team Member** | Core Platform (Member), Mobile Apps (Admin) | Contributor workflows; editing assigned tasks; deleting own documents. |
-| **`diana`** | **Team Admin** | Frontend Engineering | Design lead, inviting members, managing frontend deliverables. |
-| **`edward`** | **Team Manager** | Frontend Engineering | UI review, managing team task transitions. |
-| **`fiona`** | **Team Member / Invitee** | Core Platform (Member), Pending invite to Frontend | Testing in-app invitation acceptance and multi-team collaboration. |
-| **`george`** | **Isolated Member** | Operations Support | Testing team data isolation and anti-IDOR boundaries. |
-| **`admin`** | **System Superuser** | Organization-wide | Password: `AdminPass123!`. Access to Django Admin at `/admin/`. |
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       NEWTONITE CORE PLATFORM PILLARS                       │
+├──────────────────────┬──────────────────────┬───────────────────────────────┤
+│ 🛡️ Concurrency & OCC │ 📁 Canonical Storage │ 👥 Multi-Tenant Workspaces    │
+│ Atomic version check │ Single physical file │ Scoped team boundaries & RBAC │
+│ Side-by-side diffs   │ Zero duplicate rows  │ Strict Anti-IDOR querysets    │
+├──────────────────────┼──────────────────────┼───────────────────────────────┤
+│ 🔁 Request Dedup     │ 💌 In-App Only Invites│ 📜 Immutable Audit Trails    │
+│ Client UUID tokens   │ 100% internal alerts │ Structured JSON state diffs   │
+│ Safe retried POSTs   │ Zero email leaks     │ Filter-safe read cursor (dot) │
+├──────────────────────┼──────────────────────┼───────────────────────────────┤
+│ 🚦 State Machine     │ ⏰ Deadline Monitor  │ 📊 Analytics Dashboard        │
+│ Server-enforced flow │ Auto overdue scan    │ 6 KPI summary widgets         │
+│ Atomic status locks  │ 24h deduplication    │ 4 real-time Chart.js graphs   │
+└──────────────────────┴──────────────────────┴───────────────────────────────┘
+```
+
+### Detailed Capability Matrix
+
+* **Multi-Tenant Workspace Governance**: Isolated organizational workspaces (`Team`) with distinct membership roles (`ADMIN`, `MANAGER`, `MEMBER`).
+* **Optimistic Concurrency Control (OCC)**: Field-level version tracking via `Task.version` with atomic conditional SQL updates (`version = F('version') + 1`). Prevents silent lost updates; renders side-by-side diff conflict resolution banners on collision.
+* **Idempotency Token Protection**: Unique client UUID token architecture preventing duplicate task creation when users double-click submit or network connections retry.
+* **Canonical Unified Document Storage**: All uploads—from task creation, task detail, or the team shared library—generate exactly one canonical `SharedDocument` database record and one physical stored file. Backward compatibility with legacy `TaskAttachment` records is fully preserved.
+* **In-App Only Team Invitations**: Completely self-contained within Newtonite. Zero outbound email delivery to prevent data leakage. Requires registered user verification with honest validation, instant in-app alerts, atomic POST-based accept/decline, role provisioning, and duplicate/expiry guards.
+* **Filter-Safe Audit Read Tracking**: Persistent unread red dot indicator on the Activity navigation item powered by a per-user read cursor (`UserActivityReadState`). Scoped strictly to accessible teams; protected against premature clearing on filtered views or subsequent pagination pages.
+* **Server-Enforced Task Lifecycle State Machine**: Robust backend transition validator enforcing strict progression (`OPEN` $\leftrightarrow$ `IN_PROGRESS` $\rightarrow$ `RESOLVED` $\rightarrow$ `OPEN`). Disallows bypassing directly to resolved on creation.
+* **Anti-IDOR Security & Queryset Scoping**: All database queries are filtered via `get_accessible_tasks_qs()` and `get_accessible_teams_qs()`. Direct object access is verified by resource-level permission checks raising HTTP 403 Forbidden on violation.
+* **Anti-Privilege Escalation & Invariant Protection**: The last administrator of a team cannot be demoted or removed. Assignees must be active members of the task's team. When a member is removed from a team, assigned tasks safely transition to unassigned without data loss.
+* **Automated Deadline Alert Scanner**: Background scanner detecting overdue tasks and tasks due today, dispatching in-app notifications with 24-hour rate-limiting to prevent alert fatigue.
+* **Interactive Analytics & Reporting**: Real-time operational dashboard with 6 KPI cards and 4 Chart.js visualizations (Status Doughnut, Priority Breakdown, 7-Day Velocity Trend Line, and Team Workload Distribution).
 
 ---
 
-## 5. Render Deployment Architecture
+## 2. System Architecture & Design Patterns
 
-The application is fully pre-configured for automated continuous deployment on [Render](https://render.com):
+The application follows the **Modular Django Monolith** architectural style, decoupling business logic and access control from the view/template layer.
 
-### Build & Run Configuration
-- **Build Command**: `./build.sh` (installs `requirements.txt`, runs `collectstatic`, and applies `migrate`)
-- **Start Command**: `gunicorn config.wsgi:application`
-- **Blueprint Manifest**: [`render.yaml`](file:///d:/AIML%20Projects/omeesha/tasktrackernewtonite-main/tasktrackernewtonite-main/render.yaml)
+```mermaid
+flowchart TD
+    Browser["Web Browser / Client\n(HTML5, Vanilla CSS & JS)"]
+    WSGI["WSGI / WhiteNoise\n(CompressedManifestStaticFilesStorage)"]
+    URL["URL Dispatcher\n(config/urls.py -> tasks/urls.py)"]
+    
+    subgraph PresentationLayer ["Presentation & Controller Layer"]
+        Views["View Functions\n(tasks/views.py)"]
+        Forms["Django Forms & Validation\n(tasks/forms.py)"]
+        Context["Context Processors\n(tasks/context_processors.py)"]
+    end
+    
+    subgraph SecurityLayer ["Security & Policy Layer"]
+        Permissions["RBAC & Anti-IDOR Policies\n(tasks/permissions.py)"]
+    end
+    
+    subgraph DomainLayer ["Domain Service Layer"]
+        TaskSvc["TaskService (CRUD, OCC, State Machine)"]
+        TeamSvc["TeamService (Workspaces, Roster, Roles)"]
+        DocSvc["SharedDocumentService (Canonical Storage)"]
+        InviteSvc["InvitationService (In-App Workflows)"]
+        AuditSvc["AuditTrackingService (Read State & Logs)"]
+        DashSvc["DashboardService (SQL Aggregations)"]
+    end
+    
+    subgraph PersistenceLayer ["Data & Persistence Layer"]
+        ORM["Django ORM Models\n(tasks/models.py)"]
+        DB[("PostgreSQL (Production) /\nSQLite 3 WAL (Development)")]
+        Disk[("Persistent Disk / Media Storage\n(/var/data/media)")]
+    end
 
-### Required Environment Variables on Render
-| Variable | Value / Format | Purpose |
+    Browser <-->|HTTP Requests / HTML Responses| WSGI
+    WSGI --> URL
+    URL --> Views
+    Views --> Forms
+    Views --> Permissions
+    Permissions -.->|Guards & Scoped Querysets| Views
+    Views --> TaskSvc & TeamSvc & DocSvc & InviteSvc & AuditSvc & DashSvc
+    Context -.->|Unread Alerts & Invitations| Browser
+    TaskSvc & TeamSvc & DocSvc & InviteSvc & AuditSvc & DashSvc --> ORM
+    ORM <-->|Atomic Transactions (ACID)| DB
+    DocSvc <-->|Sanitized Upload / Stream| Disk
+```
+
+### Architectural Responsibilities
+
+| Layer | Component | Responsibility |
 | :--- | :--- | :--- |
-| `DATABASE_URL` | Auto-provided from Render PostgreSQL | Connected database URI |
-| `SECRET_KEY` | Auto-generated or strong random secret | Django production cryptography |
-| `DEBUG` | `False` | Disables debug mode in production |
-| `ALLOWED_HOSTS` | `.onrender.com,your-domain.com` | Allowed host headers |
-| `CSRF_TRUSTED_ORIGINS` | `https://*.onrender.com` | CSRF origin protection |
-| `MEDIA_ROOT` | `/var/data/media` | Target mount for Render Persistent Disk |
+| **Presentation** | `tasks/views.py` | Handles HTTP request unwrapping, Post-Redirect-Get (PRG) redirects, template rendering, and error status mapping (403, 404, 409). |
+| **Validation** | `tasks/forms.py` | Validates payloads, sanitizes inputs, injects UUID idempotency tokens, and binds OCC version numbers. |
+| **Security & Policy** | `tasks/permissions.py` | Pure functional authorization layer. Evaluates resource-level RBAC rules and constructs tenant-scoped querysets to prevent IDOR leaks. |
+| **Domain Services** | `tasks/services.py` | Encapsulates all transactional business logic, state machines, atomic version increments, audit logging, and service orchestration. |
+| **Persistence** | `tasks/models.py` | Defines normalized relational models, composite indexes, model-level validation invariants (`clean()`), and foreign key cascade rules. |
+| **Asset Delivery** | `WhiteNoise` | Production static asset pipeline with sha256 hash fingerprinting and gzip/brotli pre-compression. |
+
+---
+
+## 3. Database Architecture & Model Inventory
+
+Newtonite Task Tracker uses a clean relational schema engineered for high query efficiency, data integrity, and strict tenant isolation.
+
+### Entity Relationship Model
+
+```mermaid
+erDiagram
+    User ||--o{ TeamMembership : "belongs to"
+    Team ||--o{ TeamMembership : "roster"
+    Team ||--o{ Task : "owns"
+    User ||--o{ Task : "created_by"
+    User ||--o{ Task : "assigned_to"
+    Team ||--o{ SharedDocument : "library"
+    Task ||--o{ SharedDocument : "task_files"
+    User ||--o{ SharedDocument : "uploaded_by"
+    Team ||--o{ WorkspaceInvitation : "sent_from"
+    User ||--o{ WorkspaceInvitation : "inviter"
+    User ||--o{ WorkspaceInvitation : "invitee_user"
+    Team ||--o{ ActivityEvent : "scoped_to"
+    Task ||--o{ ActivityEvent : "subject"
+    User ||--o{ ActivityEvent : "actor"
+    User ||--o{ InAppNotification : "recipient"
+    User ||--o{ UserActivityReadState : "read_cursor"
+    Team ||--o{ UserActivityReadState : "team_scope"
+    User ||--o{ IdempotencyRecord : "deduplication"
+```
+
+### Model Specifications
+
+#### 1. `Team` (Workspace Boundary)
+* Primary organizational container. All work items, documents, and audit logs are scoped to a team.
+* **Fields**: `id` (BigAutoField), `name` (CharField, unique), `description` (TextField), `created_at`, `updated_at`.
+* **Methods**: `member_count()`, `active_tasks_count()`, `open_tasks_count()`, `overdue_tasks_count()`.
+
+#### 2. `TeamMembership` (User Role Association)
+* Maps users to teams with explicit permission roles.
+* **Fields**: `user` (FK $\rightarrow$ User), `team` (FK $\rightarrow$ Team), `role` (`ADMIN`, `MANAGER`, `MEMBER`), `created_at`.
+* **Constraint**: `UniqueConstraint(fields=['user', 'team'], name='unique_user_team_membership')`.
+
+#### 3. `Task` (Core Work Item)
+* Work item with optimistic concurrency, workflow state machine, and assignee invariants.
+* **Fields**: `title`, `description`, `status` (`OPEN`, `IN_PROGRESS`, `RESOLVED`), `priority` (`LOW`, `MEDIUM`, `HIGH`, `URGENT`), `team` (FK), `assignee` (FK $\rightarrow$ User, null=True), `creator` (FK $\rightarrow$ User), `due_date`, `is_archived`, `archived_at`, `version` (PositiveIntegerField, default=1), `created_at`, `updated_at`.
+* **Invariants (`clean()`)**: The assignee must be an active member of `task.team`.
+* **Composite Indexes**:
+  * `(team, is_archived, status)`
+  * `(team, is_archived, priority)`
+  * `(assignee, is_archived, status)`
+  * `(due_date)`, `(created_at)`
+
+#### 4. `SharedDocument` (Canonical Unified Document Storage)
+* Single canonical record representing all document uploads (task-associated or general workspace files).
+* **Fields**: `team` (FK $\rightarrow$ Team), `task` (FK $\rightarrow$ Task, null=True), `uploader` (FK $\rightarrow$ User), `file` (FileField $\rightarrow$ `shared_documents/team_<id>/`), `filename` (CharField), `file_size` (PositiveIntegerField), `content_type` (CharField), `created_at`, `updated_at`.
+* **Validation**: 25 MiB file size limit, dangerous extension blocking (`.exe`, `.bat`, `.sh`, `.py`, `.js`, etc.), path traversal sanitization.
+* **Indexes**: `(team, created_at)`, `(task, created_at)`.
+
+#### 5. `TaskAttachment` (Legacy Attachment Compatibility)
+* Preserved intact for existing records. All new uploads route to `SharedDocument`.
+* **Fields**: `task` (FK $\rightarrow$ Task), `uploader` (FK $\rightarrow$ User), `file`, `filename`, `file_size`, `content_type`, `created_at`.
+
+#### 6. `WorkspaceInvitation` (In-App Team Invitations)
+* Database-backed in-app invitation for registered users.
+* **Fields**: `team` (FK $\rightarrow$ Team), `inviter` (FK $\rightarrow$ User), `invitee_email` (EmailField), `invitee_user` (FK $\rightarrow$ User, null=True), `role` (CharField), `status` (`PENDING`, `ACCEPTED`, `DECLINED`, `REVOKED`, `EXPIRED`), `created_at`, `expires_at` (Default: 7 days).
+* **Index**: `(team, status, invitee_email)`.
+
+#### 7. `InAppNotification` (Real-Time In-App Alert Feed)
+* User alert notifications for assignments, deadlines, invitations, and status changes.
+* **Fields**: `recipient` (FK $\rightarrow$ User), `actor` (FK $\rightarrow$ User, null=True), `category` (`ASSIGNMENT`, `DEADLINE`, `STATUS`, `INVITATION`, `GENERAL`), `title`, `message`, `task` (FK), `invitation` (FK), `team` (FK), `is_read`, `read_at`, `is_urgent`, `created_at`.
+* **Indexes**: `(recipient, is_read, created_at)`, `(recipient, category)`.
+
+#### 8. `UserActivityReadState` (Audit Read Cursor Tracking)
+* Stores the highest `ActivityEvent.id` viewed by a user for each accessible team.
+* **Fields**: `user` (FK $\rightarrow$ User), `team` (FK $\rightarrow$ Team), `last_read_event_id` (PositiveBigIntegerField, default=0), `updated_at`.
+* **Constraint**: `UniqueConstraint(fields=['user', 'team'], name='unique_user_team_read_state')`.
+
+#### 9. `ActivityEvent` (Immutable Audit Log)
+* Structured audit event capturing field diffs across all entities.
+* **Fields**: `actor` (FK $\rightarrow$ User), `team` (FK $\rightarrow$ Team), `task` (FK $\rightarrow$ Task, null=True), `event_type` (CharField), `details` (TextField), `previous_state` (JSONField), `new_state` (JSONField), `created_at`.
+* **Indexes**: `(team, created_at)`, `(task, created_at)`, `(actor, created_at)`.
+
+#### 10. `IdempotencyRecord` (Request Deduplication)
+* Enforces deduplication of POST requests using a client-side UUID key.
+* **Fields**: `key` (CharField, max_length=64), `user` (FK $\rightarrow$ User), `action` (CharField), `response_code` (IntegerField), `task` (FK $\rightarrow$ Task), `created_at`.
+* **Constraint**: `UniqueConstraint(fields=['user', 'key', 'action'], name='unique_user_key_action_idempotency')`.
+
+---
+
+## 4. Authentication, Authorization & Anti-IDOR Security
+
+Newtonite enforces server-side security at both the **Queryset Scoping** level and the **Object Permission** level.
+
+### Scoped Role-Based Access Control (RBAC) Matrix
+
+| Operational Capability | Superuser | Team Admin | Team Manager | Team Member | Non-Member |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **View Workspace & Roster** | ✅ | ✅ | ✅ | ✅ | ❌ (403) |
+| **Edit Team Settings** | ✅ | ✅ | ❌ (403) | ❌ (403) | ❌ (403) |
+| **Invite Collaborators (In-App)** | ✅ | ✅ | ❌ (403) | ❌ (403) | ❌ (403) |
+| **Change Member Roles** | ✅ | ✅ | ❌ (403) | ❌ (403) | ❌ (403) |
+| **Remove Member (Safe Unlink)** | ✅ | ✅ | ❌ (403) | ❌ (403) | ❌ (403) |
+| **Demote Sole Team Admin** | ❌ Blocked | ❌ Blocked | ❌ Blocked | ❌ Blocked | ❌ Blocked |
+| **Create Work Item (Task)** | ✅ | ✅ | ✅ | ✅ | ❌ (403) |
+| **Edit Any Team Task** | ✅ | ✅ | ✅ | ❌ Assigned/Created Only | ❌ (403) |
+| **Execute Status Transitions** | ✅ | ✅ | ✅ | ✅ Assigned Only | ❌ (403) |
+| **Archive / Restore Task** | ✅ | ✅ | ✅ | ❌ (403) | ❌ (403) |
+| **Upload Shared Documents** | ✅ | ✅ | ✅ | ✅ | ❌ (403) |
+| **Download Team Documents** | ✅ | ✅ | ✅ | ✅ | ❌ (403) |
+| **Delete Any Document** | ✅ | ✅ | ✅ | ❌ Own Uploads Only | ❌ (403) |
+| **View Audit Activity History** | ✅ | ✅ | ✅ | ✅ | ❌ (403) |
+
+### Anti-IDOR Defense in Depth
+
+1. **Queryset-Level Scoping**: Views never query global sets like `Task.objects.all()`. Instead, all lookups use:
+   ```python
+   # tasks/permissions.py
+   def get_accessible_tasks_qs(user, include_archived=False):
+       if is_system_admin(user):
+           qs = Task.objects.all()
+       else:
+           qs = Task.objects.filter(team__memberships__user=user)
+       if not include_archived:
+           qs = qs.filter(is_archived=False)
+       return qs
+   ```
+2. **Resource-Level Authorization Checks**: After retrieving any object by ID, explicit policy guards verify the actor's permissions before processing:
+   ```python
+   task = get_object_or_404(Task, pk=pk)
+   if not can_edit_task(request.user, task):
+       raise PermissionDenied("You do not have permission to edit this task.")
+   ```
+3. **Sole Admin Protection**: A team cannot have its last administrator removed or demoted, preventing orphaned workspaces.
+
+---
+
+## 5. Core Workflows & Business Rules
+
+### Workflow A: Optimistic Concurrency Control (OCC)
+
+When multiple users open and edit the same work item simultaneously, Newtonite eliminates silent data overwrites.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Alice as User Alice (Admin)
+    actor Bob as User Bob (Manager)
+    participant Server as Newtonite Application
+    participant DB as Relational Database
+
+    Alice->>Server: GET /tasks/42/edit/ (receives version=1)
+    Bob->>Server: GET /tasks/42/edit/ (receives version=1)
+    
+    Alice->>Server: POST /tasks/42/edit/ (submits changes, version=1)
+    Server->>DB: UPDATE Task WHERE id=42 AND version=1 SET version=2, ...
+    DB-->>Server: Rows updated: 1 (SUCCESS)
+    Server-->>Alice: Redirect /tasks/42/ (Version 2 Saved)
+
+    Bob->>Server: POST /tasks/42/edit/ (submits changes, version=1)
+    Server->>DB: UPDATE Task WHERE id=42 AND version=1 SET version=2, ...
+    DB-->>Server: Rows updated: 0 (COLLISION DETECTED)
+    Server->>Server: Raise StaleUpdateError
+    Server-->>Bob: HTTP 409 Conflict Banner with Side-by-Side Diff
+```
+
+### Workflow B: Task Lifecycle State Machine
+
+The server enforces strict state transitions. Tasks cannot be skipped directly to `RESOLVED` during creation, and resolved tasks must be reopened before continuing work.
+
+```mermaid
+stateDiagram-v2
+    [*] --> OPEN : Task Created
+    OPEN --> IN_PROGRESS : Start Progress
+    OPEN --> RESOLVED : Complete Task
+    IN_PROGRESS --> OPEN : Pause Work
+    IN_PROGRESS --> RESOLVED : Complete Task
+    RESOLVED --> OPEN : Reopen Task
+    
+    note right of RESOLVED
+        Cannot transition directly 
+        from RESOLVED to IN_PROGRESS.
+        Must reopen to OPEN first.
+    end note
+```
+
+### Workflow C: In-App Only Team Invitations
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as Team Admin (Alice)
+    actor Invitee as Registered User (Fiona)
+    participant Server as Newtonite Server
+    participant DB as Relational Database
+
+    Admin->>Server: POST /teams/1/invitations/create/ (email=fiona@example.com)
+    Server->>DB: Verify fiona@example.com is registered
+    Server->>DB: Insert WorkspaceInvitation (PENDING, expires in 7 days)
+    Server->>DB: Insert InAppNotification (Category: INVITATION)
+    Server-->>Admin: Success: "In-app invitation sent to fiona@example.com."
+    
+    Invitee->>Server: Visits /updates/ or Dashboard
+    Server-->>Invitee: Displays Invitation Banner with Accept / Decline buttons
+    
+    Invitee->>Server: POST /invitations/4/accept/
+    Server->>DB: BEGIN TRANSACTION
+    Server->>DB: Insert TeamMembership(user=fiona, team=1, role=MEMBER)
+    Server->>DB: Update WorkspaceInvitation(status=ACCEPTED)
+    Server->>DB: Log ActivityEvent(MEMBER_ADDED)
+    Server->>DB: COMMIT TRANSACTION
+    Server-->>Invitee: Redirect /teams/1/ (Membership Active)
+```
+
+---
+
+## 6. Design System & Frontend Architecture
+
+The user interface is built with an editorial aesthetic inspired by modern, minimalist SaaS applications (Linear, Notion, Stripe), featuring warm natural tones, crisp typography, and fluid micro-interactions without relying on heavy frontend frameworks.
+
+### Color Palette Tokens
+
+```
+Light Theme (Warm Ivory & Sage)           Dark Theme (Deep Forest Night)
+┌───────────────────────────────────────┐ ┌───────────────────────────────────────┐
+│ App Background:   #FDFBF7 (Warm Ivory)│ │ App Background:   #101713 (Charcoal)  │
+│ Surface / Cards:  #FFFFFF (Crisp White│ │ Surface / Cards:  #18221C (Dark Slate) │
+│ Primary Accent:   #285741 (Forest Grn)│ │ Primary Accent:   #386E53 (Forest Glo)│
+│ Secondary Accent: #5C8571 (Sage Green)│ │ Accent Light:     #8EB3A2 (Muted Sage)│
+│ Text Primary:     #202923 (Charcoal)  │ │ Text Primary:     #F0F2E9 (Off White) │
+│ Border Subtle:    #E5E0D8 (Warm Gray) │ │ Border Subtle:    #24332A (Dark Border│
+└───────────────────────────────────────┘ └───────────────────────────────────────┘
+```
+
+### Typography Hierarchy
+
+* **Editorial Display Headings**: [*Newsreader*](https://fonts.google.com/specimen/Newsreader) (Serif optical sizing with italic emphasis).
+* **Interface & Controls**: [*Plus Jakarta Sans*](https://fonts.google.com/specimen/Plus+Jakarta+Sans) (Geometric, legible UI copy).
+* **Tabular Copy & Data**: [*Inter*](https://fonts.google.com/specimen/Inter) (High legibility for task tables, status chips, and metadata).
+* **Code & Monospace**: [*JetBrains Mono*](https://fonts.google.com/specimen/JetBrains+Mono) (Version indicators, file sizes, and IDs).
+
+### Custom Vector Artwork
+
+* **Botanical Leaf Emblem** (`static/img/leaf_emblem.svg`): Vector twin-leaf emblem with delicate stems and veins, used in navigation headers, authentication screens, and error pages.
+* **Architectural Hero Artwork** (`static/img/cityscape_art.svg`): Layered geometric pavilions, stepped terraces, and minimalist architectural towers rendered in matching sage and forest green palette.
+
+---
+
+## 7. Quick Start & Local Setup Guide
+
+Follow these steps to set up and run the application locally on Windows (PowerShell), macOS, or Linux.
+
+### Prerequisites
+
+* **Python**: Version 3.11, 3.12, or 3.14 (Verified working on Python 3.14.3).
+* **Git**: Installed and configured.
+
+### Step 1: Clone Repository & Create Virtual Environment
+
+```bash
+# Clone the repository
+git clone https://github.com/omeesha1234567/TaskWorkspace-Newtonite.git
+cd TaskWorkspace-Newtonite
+
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# Windows (PowerShell):
+.\venv\Scripts\Activate.ps1
+# macOS / Linux:
+source venv/bin/activate
+```
+
+### Step 2: Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### Step 3: Run System Verification & Database Migrations
+
+```bash
+# Verify system configuration
+python manage.py check
+
+# Apply schema migrations
+python manage.py migrate
+```
+
+### Step 4: Seed Realistic Showcase Demo Data
+
+The seeding script is verifiably idempotent and safe to execute multiple times:
+
+```bash
+python manage.py seed_demo_data
+```
+
+### Step 5: Execute Automated Test Suite
+
+```bash
+# Run via native Django test runner (61 passing tests)
+python manage.py test
+
+# Or run via Pytest with terminal coverage reporting
+python -m pytest --cov=tasks --cov-report=term
+```
+
+### Step 6: Start Local Development Server
+
+```bash
+python manage.py runserver 127.0.0.1:8000
+```
+
+Open your browser and navigate to: **[http://127.0.0.1:8000/](http://127.0.0.1:8000/)**
+
+---
+
+## 8. Demonstration Accounts & Evaluator Credentials
+
+All standard demonstration accounts share the password: `Password123!`  
+The system administrator superuser shares the password: `AdminPass123!`
+
+| Username | Role | Assigned Teams | Operational Testing Focus |
+| :--- | :--- | :--- | :--- |
+| **`alice`** | **Team Admin** | Core Platform Engineering | Workspace settings, member management, task creation, in-app invitations, shared document management. |
+| **`bob`** | **Team Manager** | Core Platform (Manager), Frontend (Member) | Multi-team management, task assignments, status transitions, shared library uploads. |
+| **`charlie`** | **Team Member** | Core Platform (Member), Mobile Apps (Admin) | Contributor workflows; editing assigned tasks; deleting own uploaded documents. |
+| **`diana`** | **Team Admin** | Frontend Engineering | Design lead; creating frontend deliverables; sending team invitations. |
+| **`edward`** | **Team Manager** | Frontend Engineering | Reviewing UI deliverables; managing team task transitions. |
+| **`fiona`** | **Team Member / Invitee** | Core Platform (Member), Pending invite to Frontend | Testing in-app invitation acceptance and multi-team collaboration. |
+| **`george`** | **Isolated Member** | Operations Support | Testing team data isolation, anti-IDOR boundaries, and permission barriers. |
+| **`admin`** | **System Superuser** | Organization-wide | Django Admin portal at `/admin/`, organization-wide override. |
+
+---
+
+## 9. Testing Strategy & Verification Results
+
+The automated test suite verifies all critical behaviors, multi-tenant boundaries, race conditions, file upload security, and in-app invitation mechanics.
+
+```
+Total Test Cases:   61 Automated Tests
+Test Pass Rate:     100% Passed (0 Failures, 0 Errors, 0 Silenced Issues)
+Execution Time:     ~2.2 seconds (via MD5 fast test password hasher)
+Code Coverage:      74% across tasks app (100% on models, admin, urls, context_processors)
+CI Pipeline:        GitHub Actions (.github/workflows/test.yml)
+```
+
+### Test Suite Catalog Breakdown
+
+```
+tasks/tests.py (61 Tests)
+├── AuthenticationAndSecurityTests (4 tests)
+│   ├── test_unauthenticated_user_redirected_to_login
+│   ├── test_login_success_and_session
+│   ├── test_login_invalid_credentials_does_not_leak_user_existence
+│   └── test_registration_creates_user_and_default_workspace
+├── TeamAuthorizationAndIsolationTests (3 tests)
+│   ├── test_cross_team_data_isolation (Anti-IDOR)
+│   ├── test_team_membership_uniqueness_constraint
+│   └── test_assignee_must_belong_to_team
+├── TaskCRUDAndValidationTests (3 tests)
+│   ├── test_create_task_lifecycle_and_audit
+│   ├── test_new_task_cannot_start_in_resolved_status
+│   └── test_member_permission_boundaries
+├── WorkflowTransitionTests (2 tests)
+│   ├── test_valid_status_flow (OPEN -> IN_PROGRESS -> RESOLVED -> OPEN)
+│   └── test_invalid_status_transition_rejected
+├── OptimisticConcurrencyStaleUpdateTests (1 test)
+│   └── test_stale_update_protection_raises_error (OCC 409 Conflict)
+├── IdempotencyDuplicateSubmissionTests (1 test)
+│   └── test_idempotent_task_creation_prevents_duplicate
+├── RoleEscalationAndMembershipTests (2 tests)
+│   ├── test_prevent_demoting_sole_admin
+│   └── test_member_cannot_manage_team_or_add_members
+├── DashboardMetricsTests (1 test)
+│   └── test_dashboard_aggregates_correctly
+├── TaskAttachmentTests (4 tests)
+│   ├── test_authorized_user_can_upload_attachment
+│   ├── test_unauthorized_user_cannot_upload_attachment
+│   ├── test_file_download_authorization
+│   └── test_delete_attachment_cleans_up_storage
+├── WorkspaceInvitationTests (6 tests)
+│   ├── test_admin_can_create_invitation
+│   ├── test_non_admin_cannot_create_invitation
+│   ├── test_duplicate_pending_invitation_prevention
+│   ├── test_invitee_can_accept_invitation
+│   ├── test_unauthorized_user_cannot_accept_someone_elses_invitation
+│   └── test_invitee_can_decline_invitation
+├── InAppNotificationTests (3 tests)
+│   ├── test_notification_created_on_task_assignment
+│   ├── test_mark_as_read_and_mark_all_read
+│   └── test_updates_center_view_renders_successfully
+├── FeatureWorkflowIntegrationTests (5 tests)
+│   ├── test_dashboard_displays_pending_invitation_banner
+│   ├── test_task_creation_with_multiple_attachments
+│   ├── test_notification_mark_read_view
+│   ├── test_notification_mark_all_read_view
+│   └── test_invitation_accept_flow_via_post
+├── SharedDocumentTests (13 tests)
+│   ├── test_anonymous_user_cannot_access_shared_documents
+│   ├── test_team_admin_can_upload_and_list_documents
+│   ├── test_team_member_can_upload_and_download_document
+│   ├── test_member_can_delete_own_document
+│   ├── test_member_cannot_delete_other_user_document (403)
+│   ├── test_admin_and_manager_can_delete_any_document
+│   ├── test_non_member_cannot_access_or_download_team_documents (403)
+│   ├── test_cross_team_task_association_rejected (ValidationError)
+│   ├── test_removing_user_from_team_revokes_document_access
+│   ├── test_oversized_file_rejected (> 25 MiB ValidationError)
+│   ├── test_dangerous_file_extension_rejected (.exe, .sh, .py)
+│   ├── test_empty_file_rejected (0-byte file)
+│   └── test_document_deletion_removes_physical_file
+├── TeamInvitationWorkflowTests (6 tests)
+│   ├── test_invitation_creation_is_in_app_only_and_sends_no_email
+│   ├── test_admin_can_create_invitation_and_notification_is_dispatched
+│   ├── test_member_cannot_create_invitation
+│   ├── test_intended_recipient_can_accept_invitation
+│   ├── test_wrong_user_cannot_accept_invitation
+│   └── test_decline_invitation_does_not_create_membership
+└── AuditReadTrackingTests (7 tests)
+    ├── test_new_activity_shows_unread_indicator
+    ├── test_visiting_activity_page_marks_as_read
+    ├── test_new_event_after_visit_makes_indicator_reappear
+    ├── test_audit_read_state_is_independent_per_user
+    ├── test_activity_from_inaccessible_team_does_not_trigger_indicator
+    ├── test_visiting_updates_centre_does_not_clear_audit_indicator
+    └── test_filtered_activity_view_does_not_clear_newer_unseen_activity
+```
+
+---
+
+## 10. Render Production Deployment Guide
+
+The application is fully pre-configured for automated continuous deployment on [Render](https://render.com) using Infrastructure-as-Code.
+
+### Infrastructure Blueprint (`render.yaml`)
+
+```yaml
+services:
+  - type: web
+    name: newtonite-web
+    env: python
+    plan: starter
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn config.wsgi:application"
+    disk:
+      name: media-data
+      mountPath: /var/data/media
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: newtonite-postgres
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://*.onrender.com"
+      - key: MEDIA_ROOT
+        value: "/var/data/media"
+
+databases:
+  - name: newtonite-postgres
+    plan: free
+```
+
+### Build & Run Pipeline
+
+* **Build Script (`build.sh`)**:
+  ```bash
+  pip install -r requirements.txt
+  python manage.py collectstatic --no-input
+  python manage.py migrate
+  ```
+* **Production Static Serving**: Handled efficiently by WhiteNoise with compressed manifest cache busting.
+* **Database Driver**: Configured via `dj-database-url` and `psycopg2-binary`. Falls back automatically to SQLite if `DATABASE_URL` is unset.
 
 > [!IMPORTANT]
-> **Persistent Disk & Data Notice**:
-> - **Storage Durability**: Render's free tier provides an ephemeral filesystem where disk changes are discarded across restarts. To ensure shared documents and attachments persist durably, `render.yaml` configures a **Starter web service** with a 1GB persistent disk mounted at `/var/data/media`.
-> - **Database Distinction**: Local SQLite data and user accounts in `db.sqlite3` do not transfer to Render. Render deploys with a clean PostgreSQL instance. To seed demonstration data on Render, execute `python manage.py seed_demo_data` via Render's SSH/Shell console.
+> **Ephemeral Filesystems vs Persistent Disk**:
+> Render's free tier provides an ephemeral filesystem where disk changes are wiped on restarts. To ensure shared documents and attachments persist durably, `render.yaml` specifies a **Starter web service** with a 1GB persistent disk mounted at `/var/data/media`.
+>
+> **Database Distinction**:
+> Local SQLite data (`db.sqlite3`) does not transfer to Render PostgreSQL. To populate realistic demonstration records on Render, execute `python manage.py seed_demo_data` via Render's SSH/Shell console.
 
 ---
 
-## 6. Project Documentation Sitemap
+## 11. Architecture Decision Records (ADRs)
 
-| Document | Purpose |
-| :--- | :--- |
-| **[PROJECT_CONTEXT.txt](file:///d:/AIML%20Projects/omeesha/tasktrackernewtonite-main/tasktrackernewtonite-main/PROJECT_CONTEXT.txt)** | Complete living architectural context, design tokens, data models, RBAC rules, Phase 1, Phase 2, and Final Pass audits. |
-| **[PROJECT_ARCHITECTURE.md](file:///d:/AIML%20Projects/omeesha/tasktrackernewtonite-main/tasktrackernewtonite-main/PROJECT_ARCHITECTURE.md)** | System architecture, request lifecycles, and component diagrams. |
-| **[DATABASE_ENGINEERING.md](file:///d:/AIML%20Projects/omeesha/tasktrackernewtonite-main/tasktrackernewtonite-main/DATABASE_ENGINEERING.md)** | Schema design, indexing, composite keys, ACID invariants, and OCC concurrency. |
-| **[PERMISSIONS.md](file:///d:/AIML%20Projects/omeesha/tasktrackernewtonite-main/tasktrackernewtonite-main/PERMISSIONS.md)** | Scoped RBAC permissions matrix, privilege escalation prevention, and anti-IDOR policies. |
-| **[ENGINEERING_DECISIONS.md](file:///d:/AIML%20Projects/omeesha/tasktrackernewtonite-main/tasktrackernewtonite-main/ENGINEERING_DECISIONS.md)** | Architecture Decision Records (ADRs) explaining technical trade-offs. |
-| **[TESTING.md](file:///d:/AIML%20Projects/omeesha/tasktrackernewtonite-main/tasktrackernewtonite-main/TESTING.md)** | Automated testing strategy, 61 test descriptions, and verification reports. |
-| **[KNOWN_LIMITATIONS.md](file:///d:/AIML%20Projects/omeesha/tasktrackernewtonite-main/tasktrackernewtonite-main/KNOWN_LIMITATIONS.md)** | Production scaling recommendations, storage guarantees, and roadmap. |
+| ADR | Decision | Context & Trade-off Rationale |
+| :--- | :--- | :--- |
+| **ADR 1** | **Modular Django Monolith over SPA** | Chosen for rapid development, built-in security (CSRF, session auth), robust ORM transactions, and zero build toolchain overhead. Eliminates API version skew. |
+| **ADR 2** | **Optimistic Concurrency Control (OCC) over Pessimistic Row Locking** | Long think-times during task editing make database row locks (`SELECT FOR UPDATE`) prone to deadlocks and connection exhaustion. OCC via `Task.version` offers non-blocking reads and safe conflict alerts. |
+| **ADR 3** | **Idempotency Token Architecture** | Eliminates duplicate task creation on network retries or double-clicks without modifying global database constraints. |
+| **ADR 4** | **Queryset-Level Scoping for Multi-Tenancy** | Filters all database access through tenant-scoped functions (`get_accessible_tasks_qs`), guaranteeing that bugs in view logic cannot leak data across teams. |
+| **ADR 5** | **Soft Archiving with Hard Data Integrity** | Tasks are soft-archived via `is_archived=True` to preserve historical audit logs and relational foreign keys, while excluding inactive items from active dashboards. |
+| **ADR 6** | **In-App Only Team Invitations** | Outbound email delivery in production invites external failure modes (bounces, spam filters, SMTP outages) and leaks confidential collaborator addresses. In-app alerts provide instant, atomic, and audited team onboarding. |
+| **ADR 7** | **Unified Canonical Document Storage** | Merges task attachments and shared documents into a single canonical `SharedDocument` model. Guarantees single-file storage, consistent security checks, and physical disk unlinking on deletion. |
+| **ADR 8** | **Per-User Database Read Cursor for Audit Tracking** | Avoids expensive boolean flags per user/event. Stores a single `last_read_event_id` per user and team in `UserActivityReadState`, querying unread presence with high-performance `.exists()`. |
+| **ADR 9** | **Render Persistent Disk Storage Architecture** | Containers on cloud PaaS are ephemeral. Mounting a 1GB persistent disk at `/var/data/media` guarantees durability for user-uploaded documents across restarts. |
+
+---
+
+## 12. Known Limitations & Production Roadmap
+
+* **Database Scalability**: Local development uses SQLite 3, which serializes writes. Under extreme write concurrency, SQLite may encounter database locks. The application is fully prepared for PostgreSQL via `DATABASE_URL`.
+* **Real-Time Push**: Updates currently rely on standard HTTP navigation and fast page loads. High-frequency live collaborative editing could be enhanced with Django Channels / WebSockets.
+* **Background Worker Processing**: Automated overdue scanning runs synchronously during dashboard requests (with 24-hour deduplication). For larger organizations, this can be moved to Celery or Django Q with a Redis broker.
+
+---
+
+## 13. Project Directory & File Inventory
+
+```
+.
+├── DATABASE_ENGINEERING.md       # Schema design, indexes, ACID invariants & OCC concurrency
+├── ENGINEERING_DECISIONS.md      # Full Architecture Decision Records (ADRs 1 through 9)
+├── KNOWN_LIMITATIONS.md          # Architectural trade-offs, storage guarantees & roadmap
+├── LICENSE                       # Project license (Apache 2.0 / GNU compatible)
+├── PERMISSIONS.md                # Scoped RBAC permissions matrix and security invariants
+├── PROJECT_ARCHITECTURE.md       # High-level architecture, request flows & Mermaid diagrams
+├── PROJECT_CONTEXT.txt           # Authoritative living technical context file
+├── README.md                     # [THIS FILE] Primary assessment documentation & runbook
+├── TESTING.md                    # Testing philosophy, 61 test catalog & coverage reports
+├── build.sh                      # Render automated deployment build script
+├── render.yaml                   # Render Blueprint Infrastructure-as-Code manifest
+├── requirements.txt              # Production and testing runtime dependencies
+├── pytest.ini                    # Pytest configuration with django settings integration
+├── db.sqlite3                    # Local SQLite 3 database with seeded showcase data
+├── manage.py                     # Django management CLI entry point
+│
+├── .github/
+│   └── workflows/
+│       └── test.yml              # GitHub Actions Continuous Integration pipeline
+│
+├── config/                       # Project configuration package
+│   ├── asgi.py                   # ASGI application callable
+│   ├── settings.py               # Django settings (WhiteNoise, dj-database-url, RBAC)
+│   ├── urls.py                   # Root URL dispatcher
+│   └── wsgi.py                   # WSGI application callable
+│
+├── media/                        # User-uploaded files (Persistent Disk mount target)
+│   ├── attachments/              # Legacy task attachments storage
+│   └── shared_documents/         # Canonical unified document storage partitioned by team
+│
+├── static/                       # Static web assets
+│   ├── css/
+│   │   └── app.css               # Vanilla CSS design system (tokens, themes, components)
+│   ├── js/
+│   │   └── app.js                # Vanilla JS (theme switch, form locks, dropzone)
+│   └── img/
+│       ├── leaf_emblem.svg       # Botanical leaf brand vector emblem
+│       └── cityscape_art.svg     # Architectural isometric hero illustration
+│
+├── tasks/                        # Core application package
+│   ├── admin.py                  # Django administrative model registrations
+│   ├── apps.py                   # AppConfig for 'tasks' app
+│   ├── context_processors.py     # Global template context (unread audit & notifications)
+│   ├── forms.py                  # Django ModelForms (OCC version binding, idempotency keys)
+│   ├── models.py                 # Domain models (Team, Task, SharedDocument, etc.)
+│   ├── permissions.py            # RBAC authorization guards and anti-IDOR queryset helpers
+│   ├── services.py               # Domain services (TaskService, SharedDocumentService, etc.)
+│   ├── tests.py                  # Automated test suite (61 tests, 100% pass rate)
+│   ├── urls.py                   # Application URL patterns (35+ named routes)
+│   ├── views.py                  # View controllers (PRG redirects, conflict resolution)
+│   ├── management/
+│   │   └── commands/
+│   │       └── seed_demo_data.py # Idempotent showcase data seeder CLI
+│   └── migrations/
+│       ├── 0001_initial.py
+│       ├── 0002_taskattachment_workspaceinvitation_inappnotification.py
+│       └── 0003_alter_activityevent_event_type_useractivityreadstate_and_more.py
+│
+└── templates/                    # Server-rendered HTML5 templates
+    ├── base.html                 # Master layout (sidebar, topbar, theme switcher, alerts)
+    ├── 403.html                  # Custom HTTP 403 Forbidden template
+    ├── 404.html                  # Custom HTTP 404 Not Found template
+    ├── 500.html                  # Custom HTTP 500 Server Error template
+    ├── activity/
+    │   └── list.html             # Audit activity history log with filters
+    ├── auth/                     # Authentication templates (login, register, reset)
+    ├── dashboard/
+    │   └── index.html            # Operational dashboard (KPIs, Chart.js, hero artwork)
+    ├── documents/
+    │   └── team_library.html     # Team shared document library UI
+    ├── profile/
+    │   └── index.html            # User profile and workspace affiliations
+    ├── tasks/                    # Task CRUD templates (create, detail, edit, list)
+    ├── teams/                    # Team workspace templates (create, detail, edit, list)
+    └── updates/
+        └── index.html            # In-app updates center (deadline alerts, notifications)
+```
+
+---
+
+<p align="center">
+  <b>Newtonite Task Tracker</b> — Crafted for the <i>Newtonite Software Engineering Challenge: Operations Under Pressure</i>.
+</p>
