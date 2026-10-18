@@ -8,7 +8,6 @@
 [![Architecture](https://img.shields.io/badge/Architecture-Modular%20Monolith-4A5568?style=for-the-badge&logo=diagram-project&logoColor=white)](#2-system-architecture--design-patterns)
 [![Tests](https://img.shields.io/badge/Automated%20Tests-61%20Passed%20(100%25)-285741?style=for-the-badge&logo=pytest&logoColor=white)](#8-testing-strategy--verification-results)
 [![Coverage](https://img.shields.io/badge/Pytest%20Coverage-74%25-5C8571?style=for-the-badge&logo=codecov&logoColor=white)](#8-testing-strategy--verification-results)
-[![Render](https://img.shields.io/badge/Deployment-Render%20Ready-46E3B7?style=for-the-badge&logo=render&logoColor=black)](#10-render-production-deployment-guide)
 [![CI](https://img.shields.io/badge/GitHub%20Actions-Passing-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](.github/workflows/test.yml)
 
 ---
