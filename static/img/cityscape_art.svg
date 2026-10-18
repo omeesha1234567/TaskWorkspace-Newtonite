@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 320" width="100%" height="100%" fill="none">
+  <defs>
+    <!-- Light & Dark Aware Gradients -->
+    <linearGradient id="skyAtmosphere" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="var(--hero-glow-start, rgba(224, 235, 221, 0.4))" />
+      <stop offset="100%" stop-color="var(--hero-glow-end, rgba(251, 250, 246, 0))" />
+    </linearGradient>
+
+    <linearGradient id="celestialOrb" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="var(--hero-orb-1, #A7C4A0)" />
+      <stop offset="100%" stop-color="var(--hero-orb-2, #5C8571)" />
+    </linearGradient>
+
+    <!-- Platform Gradients -->
+    <linearGradient id="platformTop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="var(--hero-plat-top, #E8EFE6)" />
+      <stop offset="100%" stop-color="var(--hero-plat-top2, #DCE6D9)" />
+    </linearGradient>
+    <linearGradient id="platformLeft" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="var(--hero-plat-l1, #B6C9B3)" />
+      <stop offset="100%" stop-color="var(--hero-plat-l2, #8FA88C)" />
+    </linearGradient>
+    <linearGradient id="platformRight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="var(--hero-plat-r1, #9EB59B)" />
+      <stop offset="100%" stop-color="var(--hero-plat-r2, #759172)" />
+    </linearGradient>
+
+    <!-- Tower & Architecture Gradients -->
+    <linearGradient id="towerLeft" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="var(--hero-bldg-l1, #4E7C66)" />
+      <stop offset="100%" stop-color="var(--hero-bldg-l2, #285741)" />
+    </linearGradient>
+    <linearGradient id="towerRight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="var(--hero-bldg-r1, #36654F)" />
+      <stop offset="100%" stop-color="var(--hero-bldg-r2, #1B3F2E)" />
+    </linearGradient>
+    <linearGradient id="towerHighlight" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="var(--hero-highlight, #8EB3A2)" />
+      <stop offset="100%" stop-color="var(--hero-bldg-l1, #4E7C66)" />
+    </linearGradient>
+
+    <linearGradient id="waterPool" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="var(--hero-water-1, #7CA895)" />
+      <stop offset="100%" stop-color="var(--hero-water-2, #507A67)" />
+    </linearGradient>
+
+    <!-- Filter for soft ambient glow -->
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Ambient Sky / Mist Backdrop -->
+  <ellipse cx="380" cy="110" rx="140" ry="85" fill="url(#skyAtmosphere)" filter="url(#softGlow)" opacity="0.85" />
+  
+  <!-- Celestial Sun / Moon Orb in Background -->
+  <circle cx="390" cy="90" r="32" fill="url(#celestialOrb)" opacity="0.6" />
+  <circle cx="390" cy="90" r="38" stroke="var(--hero-orb-ring, rgba(167, 196, 160, 0.3))" stroke-width="1.5" stroke-dasharray="4 3" />
+
+  <!-- Floating Isometric Master Platform Base -->
+  <!-- Top Surface (Isometric Rhombus) -->
+  <polygon points="270,140 450,210 270,280 90,210" fill="url(#platformTop)" />
+  
+  <!-- Left Side Extrusion -->
+  <polygon points="90,210 270,280 270,298 90,228" fill="url(#platformLeft)" />
+  
+  <!-- Right Side Extrusion -->
+  <polygon points="270,280 450,210 450,228 270,298" fill="url(#platformRight)" />
+
+  <!-- Platform Shadow on Ground Plane -->
+  <polygon points="270,282 460,215 310,315 120,285" fill="var(--hero-shadow, rgba(40, 87, 65, 0.08))" />
+
+  <!-- Terraced Lower Level (Stepped Garden) -->
+  <polygon points="170,175 250,205 200,225 120,195" fill="var(--hero-terrace, #D1DEC9)" />
+  <polygon points="120,195 200,225 200,231 120,201" fill="url(#platformLeft)" />
+  <polygon points="200,225 250,205 250,211 200,231" fill="url(#platformRight)" />
+
+  <!-- Water Reflection Pool -->
+  <polygon points="220,195 285,170 330,190 265,215" fill="url(#waterPool)" opacity="0.85" />
+  <!-- Water Shimmer lines -->
+  <line x1="245" y1="195" x2="275" y2="183" stroke="var(--hero-shimmer, rgba(255, 255, 255, 0.5))" stroke-width="1" stroke-linecap="round" />
+  <line x1="260" y1="205" x2="295" y2="191" stroke="var(--hero-shimmer, rgba(255, 255, 255, 0.4))" stroke-width="1" stroke-linecap="round" />
+
+  <!-- Isometric Building 1: Primary Tall Architectural Spire / Pyramid Tower -->
+  <!-- Left Face -->
+  <polygon points="320,60 300,165 330,180 320,60" fill="url(#towerLeft)" />
+  <!-- Right Face -->
+  <polygon points="320,60 330,180 360,165 320,60" fill="url(#towerRight)" />
+  <!-- Center Highlight Ridge -->
+  <line x1="320" y1="60" x2="330" y2="180" stroke="var(--hero-accent-line, #A7C4A0)" stroke-width="1.2" opacity="0.8" />
+
+  <!-- Isometric Building 2: Central Modern Glass Office / Pavilion -->
+  <!-- Left Face -->
+  <polygon points="230,105 275,122 275,178 230,160" fill="url(#towerLeft)" />
+  <!-- Right Face -->
+  <polygon points="275,122 315,108 315,162 275,178" fill="url(#towerRight)" />
+  <!-- Top Roof Garden Face -->
+  <polygon points="270,92 315,108 275,122 230,105" fill="url(#towerHighlight)" />
+  <!-- Glass Window Grid Details -->
+  <line x1="245" y1="117" x2="245" y2="166" stroke="var(--hero-window-glow, rgba(255, 255, 255, 0.4))" stroke-width="1" stroke-dasharray="3 3" />
+  <line x1="260" y1="123" x2="260" y2="172" stroke="var(--hero-window-glow, rgba(255, 255, 255, 0.4))" stroke-width="1" stroke-dasharray="3 3" />
+  <line x1="290" y1="119" x2="290" y2="167" stroke="var(--hero-window-glow, rgba(255, 255, 255, 0.4))" stroke-width="1" stroke-dasharray="3 3" />
+  <line x1="302" y1="115" x2="302" y2="163" stroke="var(--hero-window-glow, rgba(255, 255, 255, 0.4))" stroke-width="1" stroke-dasharray="3 3" />
+
+  <!-- Isometric Building 3: Left Stepped Low Pavilion -->
+  <polygon points="170,145 205,158 205,190 170,176" fill="url(#towerLeft)" />
+  <polygon points="205,158 235,147 235,178 205,190" fill="url(#towerRight)" />
+  <polygon points="200,134 235,147 205,158 170,145" fill="url(#towerHighlight)" />
+
+  <!-- Isometric Building 4: Right Triangular Prism Tower -->
+  <polygon points="365,115 350,175 380,186 365,115" fill="url(#towerLeft)" />
+  <polygon points="365,115 380,186 405,172 365,115" fill="url(#towerRight)" />
+  <line x1="365" y1="115" x2="380" y2="186" stroke="var(--hero-accent-line, #A7C4A0)" stroke-width="1" opacity="0.8" />
+
+  <!-- Isometric Building 5: Far Right Cube Pavilion -->
+  <polygon points="390,165 415,174 415,198 390,188" fill="url(#towerLeft)" />
+  <polygon points="415,174 435,166 435,190 415,198" fill="url(#towerRight)" />
+  <polygon points="410,157 435,166 415,174 390,165" fill="url(#towerHighlight)" />
+
+  <!-- Stylized Botanical Foliage & Greenery Clusters -->
+  <!-- Tree Group Left -->
+  <circle cx="150" cy="180" r="10" fill="var(--hero-tree-1, #285741)" />
+  <circle cx="158" cy="175" r="8" fill="var(--hero-tree-2, #3D6553)" />
+  <circle cx="145" cy="172" r="7" fill="var(--hero-tree-3, #5C8571)" />
+
+  <!-- Tree Group Center / Waterside -->
+  <circle cx="215" cy="205" r="9" fill="var(--hero-tree-1, #285741)" />
+  <circle cx="225" cy="200" r="7" fill="var(--hero-tree-3, #5C8571)" />
+
+  <circle cx="275" cy="225" r="11" fill="var(--hero-tree-1, #285741)" />
+  <circle cx="288" cy="218" r="9" fill="var(--hero-tree-2, #3D6553)" />
+  <circle cx="272" cy="216" r="8" fill="var(--hero-tree-3, #5C8571)" />
+
+  <!-- Tree Group Right -->
+  <circle cx="345" cy="195" r="8" fill="var(--hero-tree-2, #3D6553)" />
+  <circle cx="355" cy="190" r="10" fill="var(--hero-tree-1, #285741)" />
+  <circle cx="410" cy="210" r="8" fill="var(--hero-tree-3, #5C8571)" />
+  <circle cx="420" cy="204" r="7" fill="var(--hero-tree-1, #285741)" />
+
+  <!-- Roof Greenery on Center Building -->
+  <ellipse cx="272" cy="107" rx="14" ry="7" fill="var(--hero-tree-3, #5C8571)" />
+  <circle cx="266" cy="103" r="5" fill="var(--hero-tree-1, #285741)" />
+  <circle cx="278" cy="102" r="6" fill="var(--hero-tree-2, #3D6553)" />
+
+  <!-- Subtle Floating Leaves Motif -->
+  <path d="M125 110 C130 102 140 100 144 105 C141 112 133 116 125 110 Z" fill="var(--hero-tree-3, #5C8571)" opacity="0.75" />
+  <path d="M430 75 C434 68 442 67 445 71 C443 77 436 80 430 75 Z" fill="var(--hero-tree-2, #3D6553)" opacity="0.65" />
+</svg>

@@ -1,0 +1,347 @@
+{% extends 'base.html' %}
+
+{% block page_title %}Task #{{ task.id }}: {{ task.title }}{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb Header -->
+<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <div style="font-size: 0.8125rem; color: var(--text-muted); margin-bottom: 0.35rem;">
+      <a href="{% url 'task_list' %}">Tasks</a> &rsaquo;
+      <a href="{% url 'team_detail' pk=task.team.id %}">{{ task.team.name }}</a> &rsaquo;
+      <span>Task #{{ task.id }}</span>
+    </div>
+    <h2 style="font-family: var(--font-sans); font-size: 1.625rem; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem; letter-spacing: -0.02em;">
+      {{ task.title }}
+      {% if task.is_archived %}
+      <span class="badge badge-archived">Archived</span>
+      {% endif %}
+    </h2>
+  </div>
+
+  <div style="display: flex; gap: 0.5rem; align-items: center;">
+    {% if can_edit and not task.is_archived %}
+    <a href="{% url 'task_edit' pk=task.pk %}" class="btn btn-secondary" id="btn-edit-task">
+      <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+      Edit Task
+    </a>
+    {% endif %}
+
+    {% if can_archive %}
+      {% if not task.is_archived %}
+      <button type="button" class="btn btn-outline btn-sm" onclick="openModal('archive-modal')" style="color: var(--danger);">Archive</button>
+      {% else %}
+      <form method="post" action="{% url 'task_restore' pk=task.pk %}" style="display: inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-secondary btn-sm">Restore to Active</button>
+      </form>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<!-- Main Grid: Task Details & Activity Stream -->
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; align-items: start;">
+  <!-- Left Column: Details, Description, Transitions, Attachments, and Timeline -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+    <!-- Core Information Card -->
+    <div class="card">
+      <div style="display: flex; gap: 0.625rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap;">
+        <span class="badge badge-{{ task.status|lower }}" style="font-size: 0.8125rem; padding: 0.3rem 0.75rem;">
+          <span class="badge-dot"></span>
+          {{ task.get_status_display }}
+        </span>
+        <span class="badge badge-priority-{{ task.priority|lower }}" style="font-size: 0.8125rem; padding: 0.3rem 0.75rem;">
+          Priority: {{ task.get_priority_display }}
+        </span>
+        <span class="badge" style="background-color: var(--bg-surface-elevated); color: var(--text-muted); font-family: var(--font-mono); font-size: 0.75rem;" title="Optimistic concurrency control version">
+          v{{ task.version }}
+        </span>
+      </div>
+
+      <h3 style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 700; margin-bottom: 0.5rem;">
+        Description & Acceptance Criteria
+      </h3>
+      <div style="font-size: 0.9375rem; line-height: 1.6; color: var(--text-main); white-space: pre-wrap; background-color: var(--bg-surface-elevated); padding: 1.25rem; border-radius: var(--radius-md); min-height: 80px; border: 1px solid var(--border-subtle);">
+        {% if task.description %}{{ task.description }}{% else %}<span style="color: var(--text-subtle); font-style: italic;">No description provided.</span>{% endif %}
+      </div>
+
+      <!-- Quick Workflow Transitions -->
+      {% if can_change_status and not task.is_archived and allowed_transitions %}
+      <div style="margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border-subtle);">
+        <span style="font-size: 0.8125rem; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 0.625rem;">
+          Workflow Status Transitions (Atomic & Concurrency-Protected):
+        </span>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          {% for t in allowed_transitions %}
+          <form method="post" action="{% url 'task_transition' pk=task.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="status" value="{{ t.status }}">
+            <input type="hidden" name="version" value="{{ task.version }}">
+            <button type="submit" class="btn btn-sm {% if t.status == 'RESOLVED' %}btn-success{% else %}btn-secondary{% endif %}" data-loading-text="Updating...">
+              Transition to {{ t.label }} &rarr;
+            </button>
+          </form>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Unified Task Documents & Files Section -->
+    <div class="card" id="task-attachments-section">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+        <div>
+          <h3 class="card-title" style="display: flex; align-items: center; gap: 0.5rem;">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+            Task Documents & Files
+          </h3>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Canonical shared documents and files associated with Task #{{ task.id }}</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <a href="{% url 'team_documents' pk=task.team.id %}?task={{ task.id }}" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem;" title="View all files in Team Shared Document Library">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            <span>Team Library View</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Unified Document & Attachment List -->
+      {% if shared_documents or legacy_attachments %}
+      <div class="file-list" style="display: flex; flex-direction: column; gap: 0.625rem; margin-bottom: 1.25rem;">
+        
+        <!-- Canonical Shared Documents -->
+        {% for sdoc in shared_documents %}
+        <div class="file-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background-color: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); gap: 1rem; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 0.75rem; min-width: 0;">
+            <div class="doc-type-icon doc-type-{{ sdoc.icon_category }}" style="width: 36px; height: 36px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 0.6875rem; font-weight: 700; flex-shrink: 0;">
+              {{ sdoc.extension|slice:":3"|upper }}
+            </div>
+            <div style="min-width: 0;">
+              <a href="{% url 'shared_document_download' sdoc.pk %}" style="font-weight: 600; color: var(--text-main); text-decoration: none; word-break: break-all;" title="Download {{ sdoc.original_filename }}">
+                {{ sdoc.original_filename }}
+              </a>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
+                {{ sdoc.human_size }} &bull; Uploaded by <strong>{{ sdoc.uploader.username|default:"System" }}</strong> &bull; {{ sdoc.created_at|date:"M d, Y H:i" }}
+              </div>
+            </div>
+          </div>
+          
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
+            <a href="{% url 'shared_document_download' sdoc.pk %}" class="btn btn-outline btn-sm" download title="Download file" aria-label="Download {{ sdoc.original_filename }}">
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Download
+            </a>
+            {% if user_team_role == 'Admin' or user_team_role == 'Manager' or sdoc.uploader == request.user %}
+            <form method="post" action="{% url 'shared_document_delete' sdoc.pk %}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete {{ sdoc.original_filename|escapejs }}?');">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button type="submit" class="btn btn-outline btn-sm" style="color: var(--danger);" title="Delete document" aria-label="Delete {{ sdoc.original_filename }}" data-loading-text="...">
+                &times;
+              </button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+
+        <!-- Legacy Attachments (for backwards compatibility) -->
+        {% for att in legacy_attachments %}
+        <div class="file-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background-color: var(--bg-surface-elevated); border: 1px dashed var(--border-subtle); border-radius: var(--radius-md); gap: 1rem; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 0.75rem; min-width: 0;">
+            <div style="width: 36px; height: 36px; border-radius: var(--radius-sm); background-color: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              {% if att.is_image %}
+              <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              {% else %}
+              <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              {% endif %}
+            </div>
+            <div style="min-width: 0;">
+              <div style="display: flex; align-items: center; gap: 0.4rem;">
+                <a href="{% url 'task_attachment_download' task_pk=task.pk attachment_pk=att.pk %}" style="font-weight: 600; color: var(--text-main); text-decoration: none; word-break: break-all;" title="Download {{ att.filename }}">
+                  {{ att.filename }}
+                </a>
+                <span class="badge badge-secondary" style="font-size: 0.625rem;">Legacy</span>
+              </div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
+                {{ att.human_size }} &bull; Added by <strong>{{ att.uploader.username }}</strong> &bull; {{ att.created_at|date:"M d, Y H:i" }}
+              </div>
+            </div>
+          </div>
+          
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
+            <a href="{% url 'task_attachment_download' task_pk=task.pk attachment_pk=att.pk %}" class="btn btn-outline btn-sm" download title="Download file" aria-label="Download {{ att.filename }}">
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Download
+            </a>
+            {% if can_edit or att.uploader == request.user %}
+            <form method="post" action="{% url 'task_attachment_delete' task_pk=task.pk attachment_pk=att.pk %}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete {{ att.filename|escapejs }}?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-outline btn-sm" style="color: var(--danger);" title="Delete file" aria-label="Delete {{ att.filename }}" data-loading-text="...">
+                &times;
+              </button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+
+      </div>
+      {% else %}
+      <div class="empty-state" style="padding: 1.5rem 1rem; margin-bottom: 1rem;">
+        <svg class="empty-state-icon" width="36" height="36" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin: 0 auto 0.75rem auto;">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+        </svg>
+        <div class="empty-state-title" style="font-size: 0.9375rem;">No Files or Documents Attached</div>
+        <p class="empty-state-description" style="font-size: 0.8125rem;">Upload project specifications, reports, design files, or spreadsheets to this task.</p>
+      </div>
+      {% endif %}
+
+      <!-- File Upload Dropzone Form -->
+      {% if can_edit and not task.is_archived %}
+      <form method="post" action="{% url 'task_attachment_upload' pk=task.pk %}" enctype="multipart/form-data" id="task-attachment-upload-form" style="border-top: 1px solid var(--border-subtle); padding-top: 1.25rem;">
+        {% csrf_token %}
+        <div class="dropzone" id="file-dropzone" onclick="document.getElementById('file-upload-input').click()" role="button" tabindex="0" aria-label="Upload files">
+          <svg class="dropzone-icon" width="30" height="30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+          </svg>
+          <div class="dropzone-title">Drag and drop file here, or <span style="color: var(--primary); font-weight: 600; text-decoration: underline;">browse</span></div>
+          <div class="dropzone-hint">Uploads as a team-accessible SharedDocument (up to 25 MB)</div>
+          <input type="file" name="file" id="file-upload-input" style="display: none;" required>
+        </div>
+
+        <div id="selected-file-display" style="display: none; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; margin-top: 0.75rem; background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+          <div style="display: flex; align-items: center; gap: 0.5rem; overflow: hidden;">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--primary);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <span id="selected-file-name" style="font-weight: 600; font-size: 0.875rem; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 280px;"></span>
+            <span id="selected-file-size" style="font-size: 0.75rem; color: var(--text-muted);"></span>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" id="upload-submit-btn" data-loading-text="Uploading...">
+            Upload File
+          </button>
+        </div>
+      </form>
+      {% endif %}
+    </div>
+
+    <!-- Activity Audit History -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Audit & Activity Timeline</h3>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">Immutable change log</span>
+      </div>
+
+      {% if activity_timeline %}
+      <div class="timeline">
+        {% for event in activity_timeline %}
+        <div class="timeline-item">
+          <div class="timeline-dot"></div>
+          <div class="timeline-header">
+            <span class="timeline-actor">{{ event.actor.username|default:"System" }}</span>
+            <span class="badge badge-role-member" style="font-size: 0.6875rem;">{{ event.get_event_type_display }}</span>
+            <span class="timeline-time">{{ event.created_at|date:"M d, Y H:i" }}</span>
+          </div>
+          <div class="timeline-content">
+            {{ event.details }}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state" style="padding: 1.5rem;">
+        <p class="empty-state-description">No activity events recorded yet.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Right Column: Meta Attributes & Permissions -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+    <!-- Meta Panel -->
+    <div class="card">
+      <h3 class="card-title" style="margin-bottom: 1rem; border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.5rem;">
+        Task Metadata
+      </h3>
+
+      <div style="display: flex; flex-direction: column; gap: 1rem; font-size: 0.875rem;">
+        <div>
+          <span style="color: var(--text-muted); display: block; font-size: 0.75rem; font-weight: 600;">TEAM WORKSPACE</span>
+          <a href="{% url 'team_detail' pk=task.team.id %}" style="font-weight: 600; font-size: 0.9375rem;">{{ task.team.name }}</a>
+          <span class="badge badge-role-{{ user_team_role|lower }}" style="margin-left: 0.35rem;">Your Role: {{ user_team_role }}</span>
+        </div>
+
+        <div>
+          <span style="color: var(--text-muted); display: block; font-size: 0.75rem; font-weight: 600;">ASSIGNEE</span>
+          {% if task.assignee %}
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+            <div class="user-avatar" style="width: 26px; height: 26px; font-size: 0.6875rem;">{{ task.assignee.username|slice:":2"|upper }}</div>
+            <span style="font-weight: 600;">{{ task.assignee.get_full_name|default:task.assignee.username }} (@{{ task.assignee.username }})</span>
+          </div>
+          {% else %}
+          <span style="color: var(--text-subtle); font-style: italic;">Unassigned</span>
+          {% endif %}
+        </div>
+
+        <div>
+          <span style="color: var(--text-muted); display: block; font-size: 0.75rem; font-weight: 600;">CREATOR</span>
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+            <div class="user-avatar" style="width: 26px; height: 26px; font-size: 0.6875rem; background: var(--text-muted);">{{ task.creator.username|slice:":2"|upper }}</div>
+            <span>{{ task.creator.get_full_name|default:task.creator.username }}</span>
+          </div>
+        </div>
+
+        <div>
+          <span style="color: var(--text-muted); display: block; font-size: 0.75rem; font-weight: 600;">DEADLINE / DUE DATE</span>
+          {% if task.due_date %}
+            <span style="font-weight: 600; {% if task.is_overdue %}color: var(--danger);{% endif %}">
+              {{ task.due_date|date:"F d, Y" }}
+              {% if task.is_overdue %}<span class="badge badge-priority-urgent" style="margin-left: 0.35rem;">Overdue</span>{% endif %}
+            </span>
+          {% else %}
+            <span style="color: var(--text-subtle);">None set</span>
+          {% endif %}
+        </div>
+
+        <div>
+          <span style="color: var(--text-muted); display: block; font-size: 0.75rem; font-weight: 600;">OPTIMISTIC LOCK VERSION</span>
+          <span style="font-family: var(--font-mono); font-weight: 700; color: var(--primary);">Version {{ task.version }}</span>
+          <div style="font-size: 0.6875rem; color: var(--text-subtle); margin-top: 0.125rem;">Guarantees lost-update prevention under concurrent edits.</div>
+        </div>
+
+        <div style="border-top: 1px solid var(--border-subtle); padding-top: 0.75rem; font-size: 0.75rem; color: var(--text-subtle); display: flex; flex-direction: column; gap: 0.25rem;">
+          <div>Created: {{ task.created_at|date:"M d, Y H:i" }}</div>
+          <div>Last Updated: {{ task.updated_at|date:"M d, Y H:i" }}</div>
+          {% if task.archived_at %}
+          <div>Archived at: {{ task.archived_at|date:"M d, Y H:i" }}</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Archive Confirmation Modal -->
+<div class="modal-overlay" id="archive-modal">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 style="font-size: 1rem; font-weight: 700; color: var(--text-main);">Confirm Archive Task</h3>
+      <button type="button" class="alert-close" onclick="closeModal('archive-modal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size: 0.875rem; color: var(--text-muted);">
+        Are you sure you want to archive <strong>Task #{{ task.id }} ({{ task.title }})</strong>?
+      </p>
+      <p style="font-size: 0.8125rem; color: var(--text-muted); margin-top: 0.5rem;">
+        Archiving removes this task from active boards and dashboards while safely preserving all history, activity logs, and attachments.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('archive-modal')">Cancel</button>
+      <form method="post" action="{% url 'task_archive' pk=task.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger btn-sm" data-loading-text="Archiving...">Yes, Archive Task</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

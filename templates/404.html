@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+
+{% block page_title %}404 - Not Found{% endblock %}
+
+{% block content %}
+<div class="empty-state card" style="max-width: 540px; margin: 3rem auto; padding: 3rem 2rem; text-align: center;">
+  <div style="width: 56px; height: 56px; border-radius: var(--radius-full); background: rgba(167, 196, 160, 0.2); color: var(--accent-sage-dark); display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem auto;">
+    <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+  </div>
+  <h2 style="font-family: var(--font-display); font-size: 1.75rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.5rem; letter-spacing: -0.02em;">Resource Not Found</h2>
+  <p style="color: var(--text-muted); font-size: 0.9375rem; margin-bottom: 1.75rem; line-height: 1.6;">
+    The requested task, workspace, or view could not be located. It may have been archived, removed, or the link may be inaccurate.
+  </p>
+  <div style="display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap;">
+    <a href="{% url 'dashboard' %}" class="btn btn-primary">Go to Dashboard</a>
+    <a href="{% url 'task_list' %}" class="btn btn-secondary">Browse Tasks</a>
+  </div>
+</div>
+{% endblock %}

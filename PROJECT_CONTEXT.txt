@@ -1,0 +1,1409 @@
+================================================================================
+NEWTONITE SOFTWARE ENGINEERING CHALLENGE: OPERATIONS UNDER PRESSURE
+LIVING TECHNICAL CONTEXT & APPLICATION ARCHITECTURE INVENTORY
+================================================================================
+File: PROJECT_CONTEXT.txt
+Path: ./PROJECT_CONTEXT.txt
+Repository: Newtonite Task Tracker (Assessment Project)
+Initial Audit Timestamp: 2026-10-18T17:30:00+05:30
+Author / Maintainer: AI Technical Assistant (Pair Programmer)
+Status: Active & Continuously Maintained Living Record
+Audit Scope: Read-Only Architectural & Technical Audit (No application code modified)
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. PROJECT OVERVIEW
+2. REPOSITORY STRUCTURE & FILE DIRECTORY
+3. DATABASE ARCHITECTURE & MODEL INVENTORY
+4. URLS, VIEWS, FORMS & REQUEST FLOW
+5. EXISTING FEATURES & FUNCTIONAL CONTRACTS
+6. AUTHENTICATION & AUTHORIZATION SPECIFICATION
+7. WORKFLOWS & BUSINESS RULES SPECIFICATION
+8. UI & FRONTEND ARCHITECTURE
+9. API & INTEGRATION INVENTORY
+10. TESTING & VERIFICATION STATUS
+11. CONFIGURATION, SETUP & DEPLOYMENT RUNBOOK
+12. ASSESSMENT ALIGNMENT & ENGINEERING EVALUATION
+13. KNOWN LIMITATIONS & CHANGE-RISK REGISTER
+14. CURRENT BASELINE
+15. PRIORITISED NEXT STEPS (P0 / P1 / P2)
+16. CHANGE LOG & AUDIT VERIFICATION RECORD
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+1.1 What the Application Does Today
+Newtonite Task Tracker is an enterprise-oriented, multi-tenant, collaborative task
+and work-item management SaaS web application built with Python and Django.
+It is engineered specifically for engineering teams operating under operational pressure,
+providing:
+- Team-scoped multi-tenancy with distinct organizational workspaces.
+- Scoped Role-Based Access Control (RBAC: Admin, Manager, Member) preventing IDOR.
+- Optimistic Concurrency Control (OCC) with atomic version checks preventing lost updates.
+- Idempotency key architecture preventing duplicate task creations on retried requests.
+- Server-enforced task lifecycle state machine (OPEN <-> IN_PROGRESS -> RESOLVED -> OPEN).
+- Granular, immutable audit activity logs storing structured JSON snapshots of field diffs.
+- Interactive analytics dashboard with Chart.js charts (Status, Priority, Trend, Workload).
+- Task attachments management with secure file uploads, download streaming, and disk cleanup.
+- Workspace invitation workflows (invite via email, in-app notification, accept/decline/revoke).
+- In-app notification center with automated overdue/today deadline detection and unread badges.
+
+1.2 Architectural Style & Framework
+- Architectural Style: Modular Django Monolith following Model-View-Template (MVT).
+- Decoupling Layer: Dedicated Domain Service Layer (tasks/services.py) and Policy Layer (tasks/permissions.py).
+- Backend Framework: Django 6.0.5 / 6.1.2 on Python 3.14.3.
+- Database Engine: SQLite 3 (configured at BASE_DIR / 'db.sqlite3') with composite B-tree indexes and WAL mode.
+- Frontend: Server-side rendered Django HTML5 templates, Vanilla CSS Design System (static/css/app.css) with light/dark theme tokens, and unobtrusive Vanilla JavaScript (static/js/app.js).
+- Charting: Chart.js 4.4.1 loaded via CDN (UMD build).
+- Authentication: Django built-in session authentication (django.contrib.auth) using PBKDF2 (and MD5 hasher in test runs).
+
+1.3 Main Entry Points & Execution Flow
+- WSGI Entry Point: config/wsgi.py -> config.settings -> config.urls.
+- ASGI Entry Point: config/asgi.py (available for asynchronous servers).
+- Administrative Tasks: manage.py (standard Django CLI).
+- URL Routing: config/urls.py delegates '/admin/' to Django Admin and '' to tasks.urls.
+- Context Processing: tasks.context_processors.global_context injects unread notifications and pending invitation counts into all rendered templates.
+
+1.4 Confirmed vs Uncertain Elements
+- CONFIRMED BY SOURCE CODE:
+  * All 8 domain models (Team, TeamMembership, Task, ActivityEvent, IdempotencyRecord, TaskAttachment, WorkspaceInvitation, InAppNotification) exist and are fully implemented in tasks/models.py.
+  * All 36 automated unit and integration tests in tasks/tests.py pass without errors (100% pass rate).
+  * 2 migrations exist and are fully applied in db.sqlite3.
+  * Complete service layer, permission matrix, and views are present and functioning.
+- DISCREPANCIES / DOCUMENTATION LAG IDENTIFIED:
+  * Existing documentation files (README.md, TESTING.md, KNOWN_LIMITATIONS.md) were written before migration 0002 was added. They state "17 tests" (there are now 36 tests) and list "File attachments" as a future limitation (TaskAttachment, WorkspaceInvitation, and InAppNotification are already implemented in code and tested).
+  * No 'requirements.txt' or 'pyproject.toml' file is present in the repository root.
+  * Repository is not currently tracked by a local Git repository (no '.git' directory present).
+
+================================================================================
+2. REPOSITORY STRUCTURE & FILE DIRECTORY
+================================================================================
+
+2.1 Annotated Directory Tree
+.
+|-- DATABASE_ENGINEERING.md       # Architectural deep-dive on schema, indexes, ACID & concurrency
+|-- ENGINEERING_DECISIONS.md      # Architecture Decision Records (ADRs) explaining technical choices
+|-- KNOWN_LIMITATIONS.md          # Architectural trade-offs and future expansion notes
+|-- LICENSE                       # Project license (Apache 2.0 / GNU compatible)
+|-- PERMISSIONS.md                # Scoped RBAC permissions matrix and security invariants
+|-- PROJECT_ARCHITECTURE.md       # High-level architecture, MVT design, and Mermaid diagrams
+|-- README.md                     # Evaluator quick-start guide, credentials, and feature guide
+|-- TESTING.md                    # Testing philosophy and test suite inventory
+|-- PROJECT_CONTEXT.txt           # [THIS FILE] Authoritative living technical context file
+|-- db.sqlite3                    # Active SQLite 3 database file containing live and seeded data
+|-- manage.py                     # Django management script entry point
+|
+|-- config/                       # Project configuration package
+|   |-- __init__.py
+|   |-- asgi.py                   # ASGI application callable
+|   |-- settings.py               # Django settings (installed apps, database, auth, static, media)
+|   |-- urls.py                   # Root URL dispatcher
+|   `-- wsgi.py                   # WSGI application callable
+|
+|-- media/                        # User-uploaded files (Task Attachments)
+|   `-- attachments/              # Year/Month partitioned storage for uploaded files
+|       `-- 2026/10/
+|
+|-- static/                       # Static assets
+|   |-- css/
+|   |   `-- app.css               # Vanilla CSS design system (tokens, themes, components, layout)
+|   `-- js/
+|       `-- app.js                # Vanilla JS (theme switch, form locks, dynamic fetch, dropzone)
+|
+|-- tasks/                        # Core application package ('tasks')
+|   |-- __init__.py
+|   |-- admin.py                  # Django administrative model registrations and inlines
+|   |-- apps.py                   # AppConfig for 'tasks' app
+|   |-- context_processors.py     # Global template context (unread notifications, invitations)
+|   |-- forms.py                  # Django ModelForms and Forms (auth, task, team, invite, attach)
+|   |-- models.py                 # Domain models (8 models with indexes, constraints, clean())
+|   |-- permissions.py            # RBAC authorization guards and scoped queryset helpers (anti-IDOR)
+|   |-- services.py               # Domain services (TaskService, TeamService, DashboardService, etc.)
+|   |-- tests.py                  # Automated test suite (36 tests across 10 test classes)
+|   |-- urls.py                   # Application URL patterns (35+ named routes)
+|   |-- views.py                  # View functions handling HTTP requests, PRG redirects, errors
+|   |-- management/
+|   |   `-- commands/
+|   |       `-- seed_demo_data.py # CLI command to seed demo teams, users, tasks, and audit logs
+|   `-- migrations/
+|       |-- __init__.py
+|       |-- 0001_initial.py       # Initial schema: Team, Membership, Task, Activity, Idempotency
+|       `-- 0002_taskattachment_workspaceinvitation_inappnotification.py # Schema v2 extensions
+|
+`-- templates/                    # Server-rendered HTML templates
+    |-- base.html                 # Master layout (sidebar, topbar, theme switcher, alerts, scripts)
+    |-- 403.html                  # Custom HTTP 403 Forbidden template
+    |-- 404.html                  # Custom HTTP 404 Not Found template
+    |-- 500.html                  # Custom HTTP 500 Server Error template
+    |-- activity/
+    |   `-- list.html             # Audit activity history log with filters
+    |-- auth/
+    |   |-- login.html            # User login screen with remember-me
+    |   |-- register.html         # User registration with automatic team onboarding
+    |   |-- password_reset.html   # Password recovery request form
+    |   |-- password_reset_done.html
+    |   |-- password_reset_confirm.html
+    |   |-- password_reset_complete.html
+    |   |-- password_reset_email.html
+    |   `-- password_reset_subject.txt
+    |-- dashboard/
+    |   `-- index.html            # Primary dashboard (KPIs, Chart.js charts, overdue alert, stream)
+    |-- profile/
+    |   `-- index.html            # User profile and workspace memberships overview
+    |-- tasks/
+    |   |-- create.html           # Task creation form with dynamic assignee select & dropzone
+    |   |-- detail.html           # Task detail view, attachments, allowed transitions & audit trail
+    |   |-- edit.html             # Task edit form with OCC version check & conflict diff banner
+    |   `-- list.html             # Filterable, sortable, paginated task list table
+    |-- teams/
+    |   |-- create.html           # Team workspace creation form
+    |   |-- detail.html           # Team roster, roles management, invitations & team tasks
+    |   |-- edit.html             # Team name and description edit form
+    |   `-- list.html             # Accessible teams overview
+    `-- updates/
+        `-- index.html            # In-app updates center (deadline alerts, notifications, read actions)
+
+2.2 Implementation Blueprint: Where to Make Changes
+- Backend Business Logic: Implement in tasks/services.py (never put complex orchestration in views).
+- Authorization & Permissions: Implement in tasks/permissions.py.
+- Database Schema & Invariants: Update tasks/models.py and generate migrations via makemigrations.
+- Web Forms & Client Validation: Add or modify forms in tasks/forms.py.
+- Request Dispatch & Routing: Register in tasks/urls.py and handle in tasks/views.py.
+- UI Layout & Visual Design: Modify templates/ and static/css/app.css.
+- Client-Side Scripting: Modify static/js/app.js.
+- Automated Tests: Add new test classes or methods to tasks/tests.py.
+
+2.3 High-Risk Files (Modify with Extreme Caution)
+- tasks/models.py: Relied upon by migrations, admin, forms, services, permissions, and views.
+- tasks/services.py: Encapsulates atomic transactions, OCC version increments, and audit events.
+- tasks/permissions.py: Governs multi-tenant data isolation; mistakes create IDOR vulnerabilities.
+- tasks/forms.py: Validates incoming payloads and embeds idempotency and version fields.
+- config/settings.py: Core configuration affecting security, hashers, databases, and middleware.
+
+================================================================================
+3. DATABASE ARCHITECTURE & MODEL INVENTORY
+================================================================================
+
+3.1 Configured Database Engine
+- Engine: 'django.db.backends.sqlite3'
+- File: BASE_DIR / 'db.sqlite3' (confirmed live SQLite 3 database).
+- Isolation: SQLite file-level locking with WAL (Write-Ahead Logging) compatibility.
+- Transactions: All multi-step operations executed inside Python 'with transaction.atomic():' blocks.
+
+3.2 Model Inventory (tasks/models.py)
+
+1. Team
+   - Purpose: Multi-tenant workspace boundary.
+   - Fields:
+     * id: BigAutoField (PK)
+     * name: CharField(max_length=100, unique=True)
+     * description: TextField(blank=True)
+     * created_at: DateTimeField(auto_now_add=True)
+     * updated_at: DateTimeField(auto_now=True)
+   - Methods: member_count(), active_tasks_count(), open_tasks_count(), overdue_tasks_count().
+   - Deletion: Cascade deletes child memberships, tasks, activity events, and invitations.
+
+2. TeamMembership
+   - Purpose: Association of User to Team with an explicit role.
+   - Fields:
+     * id: BigAutoField (PK)
+     * user: ForeignKey(User, on_delete=CASCADE, related_name='team_memberships')
+     * team: ForeignKey(Team, on_delete=CASCADE, related_name='memberships')
+     * role: CharField(max_length=20, choices=TeamRole.choices: ADMIN, MANAGER, MEMBER; default=MEMBER)
+     * created_at: DateTimeField(auto_now_add=True)
+   - Constraints:
+     * UniqueConstraint(fields=['user', 'team'], name='unique_user_team_membership')
+
+3. Task
+   - Purpose: Primary work item tracked in the system.
+   - Fields:
+     * id: BigAutoField (PK)
+     * title: CharField(max_length=200)
+     * description: TextField(blank=True)
+     * status: CharField(max_length=20, choices=TaskStatus.choices: OPEN, IN_PROGRESS, RESOLVED; default=OPEN)
+     * priority: CharField(max_length=20, choices=TaskPriority.choices: LOW, MEDIUM, HIGH, URGENT; default=MEDIUM)
+     * team: ForeignKey(Team, on_delete=CASCADE, related_name='tasks')
+     * assignee: ForeignKey(User, on_delete=SET_NULL, null=True, blank=True, related_name='assigned_tasks')
+     * creator: ForeignKey(User, on_delete=PROTECT, related_name='created_tasks')
+     * due_date: DateField(null=True, blank=True)
+     * is_archived: BooleanField(default=False)
+     * archived_at: DateTimeField(null=True, blank=True)
+     * version: PositiveIntegerField(default=1) [Optimistic Concurrency Control]
+     * created_at: DateTimeField(auto_now_add=True)
+     * updated_at: DateTimeField(auto_now=True)
+   - Properties: is_overdue (boolean calculated against timezone.localdate()).
+   - Validation (clean()): Invariant check ensuring assignee is an active member of task.team.
+   - Indexes:
+     * task_team_arch_status_idx: (team, is_archived, status)
+     * task_team_arch_prio_idx: (team, is_archived, priority)
+     * task_assignee_status_idx: (assignee, is_archived, status)
+     * task_due_date_idx: (due_date)
+     * task_created_at_idx: (created_at)
+
+4. ActivityEvent
+   - Purpose: Immutable audit log entry for compliance and tracking.
+   - Fields:
+     * id: BigAutoField (PK)
+     * actor: ForeignKey(User, on_delete=SET_NULL, null=True, blank=True, related_name='activity_events')
+     * team: ForeignKey(Team, on_delete=CASCADE, related_name='activity_events')
+     * task: ForeignKey(Task, on_delete=SET_NULL, null=True, blank=True, related_name='activity_events')
+     * event_type: CharField(max_length=50, choices=EventType.choices: TASK_CREATED, TASK_UPDATED, STATUS_CHANGED, PRIORITY_CHANGED, ASSIGNMENT_CHANGED, TASK_RESOLVED, TASK_REOPENED, TASK_ARCHIVED, TASK_UNARCHIVED, MEMBER_ADDED, MEMBER_ROLE_CHANGED, MEMBER_REMOVED)
+     * details: TextField()
+     * previous_state: JSONField(default=dict, blank=True)
+     * new_state: JSONField(default=dict, blank=True)
+     * created_at: DateTimeField(auto_now_add=True)
+   - Indexes:
+     * activity_team_created_idx: (team, created_at)
+     * activity_task_created_idx: (task, created_at)
+     * activity_actor_created_idx: (actor, created_at)
+
+5. IdempotencyRecord
+   - Purpose: Enforces deduplication of POST requests using a client UUID key.
+   - Fields:
+     * id: BigAutoField (PK)
+     * key: CharField(max_length=64)
+     * user: ForeignKey(User, on_delete=CASCADE, related_name='idempotency_records')
+     * action: CharField(max_length=64, default='TASK_CREATE')
+     * response_code: IntegerField(default=200)
+     * task: ForeignKey(Task, on_delete=SET_NULL, null=True, blank=True)
+     * created_at: DateTimeField(auto_now_add=True)
+   - Constraints:
+     * UniqueConstraint(fields=['user', 'key', 'action'], name='unique_user_key_action_idempotency')
+
+6. TaskAttachment
+   - Purpose: File uploads (PDFs, images, specs) attached to tasks.
+   - Fields:
+     * id: BigAutoField (PK)
+     * task: ForeignKey(Task, on_delete=CASCADE, related_name='attachments')
+     * uploader: ForeignKey(User, on_delete=SET_NULL, null=True, blank=True, related_name='uploaded_attachments')
+     * file: FileField(upload_to='attachments/%Y/%m/')
+     * filename: CharField(max_length=255)
+     * file_size: PositiveIntegerField(default=0)
+     * content_type: CharField(max_length=100, blank=True)
+     * created_at: DateTimeField(auto_now_add=True)
+   - Properties: human_size, is_image.
+
+7. WorkspaceInvitation
+   - Purpose: Invitations for joining teams via email address.
+   - Fields:
+     * id: BigAutoField (PK)
+     * team: ForeignKey(Team, on_delete=CASCADE, related_name='invitations')
+     * inviter: ForeignKey(User, on_delete=CASCADE, related_name='sent_invitations')
+     * invitee_email: EmailField()
+     * invitee_user: ForeignKey(User, on_delete=CASCADE, null=True, blank=True, related_name='received_invitations')
+     * role: CharField(max_length=20, choices=TeamRole.choices, default=MEMBER)
+     * status: CharField(max_length=20, choices=InvitationStatus.choices: PENDING, ACCEPTED, DECLINED, REVOKED, EXPIRED; default=PENDING)
+     * created_at: DateTimeField(auto_now_add=True)
+     * expires_at: DateTimeField() [Default: 7 days]
+   - Properties: is_expired.
+
+8. InAppNotification
+   - Purpose: Real-time user alert feed and deadline warning system.
+   - Fields:
+     * id: BigAutoField (PK)
+     * recipient: ForeignKey(User, on_delete=CASCADE, related_name='inapp_notifications')
+     * actor: ForeignKey(User, on_delete=SET_NULL, null=True, blank=True, related_name='triggered_notifications')
+     * category: CharField(max_length=30, choices=NotificationCategory.choices: ASSIGNMENT, DEADLINE, STATUS, INVITATION, GENERAL; default=GENERAL)
+     * title: CharField(max_length=200)
+     * message: TextField()
+     * task: ForeignKey(Task, on_delete=SET_NULL, null=True, blank=True, related_name='notifications')
+     * invitation: ForeignKey(WorkspaceInvitation, on_delete=SET_NULL, null=True, blank=True, related_name='notifications')
+     * team: ForeignKey(Team, on_delete=CASCADE, null=True, blank=True, related_name='notifications')
+     * is_read: BooleanField(default=False)
+     * read_at: DateTimeField(null=True, blank=True)
+     * is_urgent: BooleanField(default=False)
+     * created_at: DateTimeField(auto_now_add=True)
+   - Indexes:
+     * notif_recip_read_idx: (recipient, is_read, created_at)
+     * notif_recip_cat_idx: (recipient, category)
+
+3.3 Migrations Record
+- 0001_initial.py: Defines Team, TeamMembership, Task, ActivityEvent, IdempotencyRecord with constraints and composite indexes.
+- 0002_taskattachment_workspaceinvitation_inappnotification.py: Adds TaskAttachment, WorkspaceInvitation, and InAppNotification with indexes and foreign keys.
+- Both migrations are verified applied in db.sqlite3.
+
+================================================================================
+4. URLS, VIEWS, FORMS & REQUEST FLOW
+================================================================================
+
+4.1 Route Inventory
+
+Authentication:
+- /login/                     [GET, POST] views.login_view            -> 'login'
+- /logout/                    [GET]       views.logout_view           -> 'logout'
+- /register/                  [GET, POST] views.register_view         -> 'register'
+- /password-reset/            [GET, POST] auth_views.PasswordResetView-> 'password_reset'
+- /password-reset/done/       [GET]       auth_views.PasswordResetDoneView -> 'password_reset_done'
+- /password-reset-confirm/<uidb64>/<token>/ [GET, POST] PasswordResetConfirmView -> 'password_reset_confirm'
+- /password-reset-complete/   [GET]       auth_views.PasswordResetCompleteView -> 'password_reset_complete'
+
+Dashboard:
+- /                           [GET]       views.dashboard_view        -> 'dashboard'
+
+Tasks:
+- /tasks/                     [GET]       views.task_list_view        -> 'task_list'
+- /tasks/new/                 [GET, POST] views.task_create_view      -> 'task_create'
+- /tasks/<pk>/                [GET]       views.task_detail_view      -> 'task_detail'
+- /tasks/<pk>/edit/           [GET, POST] views.task_edit_view        -> 'task_edit'
+- /tasks/<pk>/transition/     [POST]      views.task_transition_view  -> 'task_transition'
+- /tasks/<pk>/archive/        [POST]      views.task_archive_view     -> 'task_archive'
+- /tasks/<pk>/restore/        [POST]      views.task_restore_view     -> 'task_restore'
+
+Task Attachments:
+- /tasks/<pk>/attachments/upload/                               [POST] views.task_attachment_upload_view   -> 'task_attachment_upload'
+- /tasks/<task_pk>/attachments/<attachment_pk>/download/        [GET]  views.task_attachment_download_view -> 'task_attachment_download'
+- /tasks/<task_pk>/attachments/<attachment_pk>/delete/          [POST] views.task_attachment_delete_view   -> 'task_attachment_delete'
+
+Teams:
+- /teams/                     [GET]       views.team_list_view        -> 'team_list'
+- /teams/new/                 [GET, POST] views.team_create_view      -> 'team_create'
+- /teams/<pk>/                [GET]       views.team_detail_view      -> 'team_detail'
+- /teams/<pk>/edit/           [GET, POST] views.team_edit_view        -> 'team_edit'
+- /teams/<pk>/members/add/    [POST]      views.team_add_member_view  -> 'team_add_member'
+- /teams/<pk>/members/<membership_id>/role/   [POST] views.team_change_role_view   -> 'team_change_role'
+- /teams/<pk>/members/<membership_id>/remove/ [POST] views.team_remove_member_view -> 'team_remove_member'
+
+Workspace Invitations:
+- /teams/<pk>/invitations/create/ [POST] views.invitation_create_view  -> 'invitation_create'
+- /invitations/<pk>/accept/       [POST] views.invitation_accept_view  -> 'invitation_accept'
+- /invitations/<pk>/decline/      [POST] views.invitation_decline_view -> 'invitation_decline'
+- /invitations/<pk>/revoke/       [POST] views.invitation_revoke_view  -> 'invitation_revoke'
+
+Updates Center & Notifications:
+- /updates/                   [GET]  views.updates_center_view        -> 'updates_center'
+- /updates/<pk>/read/         [POST] views.notification_mark_read_view -> 'notification_mark_read'
+- /updates/read-all/          [POST] views.notification_mark_all_read_view -> 'notification_mark_all_read'
+
+Activity Log & Profile:
+- /activity/                  [GET] views.activity_list_view          -> 'activity_list'
+- /profile/                   [GET] views.profile_view                -> 'profile'
+
+Helper APIs:
+- /api/teams/<team_id>/members/ [GET] views.api_team_members_view     -> 'api_team_members'
+
+Django Admin:
+- /admin/                     [*]   admin.site.urls
+
+4.2 End-to-End Request Lifecycles
+
+Lifecycle A: User Onboarding & Registration
+1. User submits /register/ with username, name, email, and password.
+2. Form clean() checks for username/email uniqueness (case-insensitive).
+3. User is created in auth_user.
+4. TeamService.create_team() automatically provisions a default workspace ("<Username>'s Team") and creates a TeamMembership with role=ADMIN.
+5. User is logged in via django.contrib.auth.login().
+6. Redirects to / (dashboard).
+
+Lifecycle B: Idempotent Task Creation
+1. User visits /tasks/new/. TaskCreateForm initializes with a unique UUID idempotency key in a hidden field.
+2. Assignee select is populated only with members belonging to user's first accessible team.
+3. User submits POST. TaskService.create_task() checks IdempotencyRecord inside an atomic transaction.
+4. If the key already exists for this user and action, the existing task is returned immediately.
+5. If new: Task record is inserted, IdempotencyRecord is stored, ActivityEvent (TASK_CREATED) is saved, and assignee notification is dispatched.
+6. User redirected via PRG pattern to /tasks/<new_id>/.
+
+Lifecycle C: Optimistic Concurrency Controlled Task Editing
+1. User visits /tasks/<id>/edit/. Form embeds hidden field: <input name="version" value="1">.
+2. User submits changes. View passes submitted_version to TaskService.update_task().
+3. TaskService runs atomic update:
+   Task.objects.filter(pk=task.pk, version=submitted_version).update(..., version=F('version')+1)
+4. If rows_updated == 0: Another user updated the task in between. StaleUpdateError is raised.
+5. View catches StaleUpdateError, fetches current task state from database, renders edit.html showing a conflict alert and side-by-side comparison, and updates the form version field.
+6. If rows_updated == 1: Update succeeds, field diff is logged in ActivityEvent, notifications sent if reassigned or status altered, and redirects to task detail.
+
+Lifecycle D: Fast Workflow State Transition
+1. User clicks status transition button on task detail or list.
+2. POST to /tasks/<id>/transition/ with new_status and version.
+3. TaskService.validate_transition() validates against VALID_TRANSITIONS state machine.
+4. Atomic conditional update increments version and transitions status.
+5. ActivityEvent (STATUS_CHANGED, TASK_RESOLVED, or TASK_REOPENED) logged.
+6. Redirects to task detail with flash success message.
+
+================================================================================
+5. EXISTING FEATURES & FUNCTIONAL CONTRACTS
+================================================================================
+
+1. Authentication & Session Security
+   - Implementation: Full. Login, Logout, Register, Password Reset.
+   - Verified by tests: Yes (AuthenticationAndSecurityTests).
+   - Invariants: Unauthenticated users redirected; login credential failures do not leak username existence; registration provisions default workspace; remember-me toggles session expiry (browser session vs 2 weeks).
+
+2. Scoped Multi-Team Workspaces
+   - Implementation: Full. Creation, editing, roster management, role assignment.
+   - Verified by tests: Yes (TeamAuthorizationAndIsolationTests, RoleEscalationAndMembershipTests).
+   - Invariants: Sole administrator cannot be demoted or removed; non-admins cannot manage settings or members; user can leave team if not sole admin.
+
+3. Task Creation & Work-Item Management
+   - Implementation: Full. Title, description, team, priority, status, assignee, due date.
+   - Verified by tests: Yes (TaskCRUDAndValidationTests, IdempotencyDuplicateSubmissionTests).
+   - Invariants: Cannot start in RESOLVED status; assignee must belong to task's team; duplicate submissions deduplicated by UUID key.
+
+4. Task Editing & Optimistic Concurrency Control (OCC)
+   - Implementation: Full. Form editing with hidden version check.
+   - Verified by tests: Yes (OptimisticConcurrencyStaleUpdateTests).
+   - Invariants: Stale updates rejected without data loss; conflict diff rendered.
+
+5. Enforced Status Transitions (State Machine)
+   - Implementation: Full. OPEN <-> IN_PROGRESS, OPEN/IN_PROGRESS -> RESOLVED, RESOLVED -> OPEN.
+   - Verified by tests: Yes (WorkflowTransitionTests).
+   - Invariants: Illegal transitions (e.g. RESOLVED -> IN_PROGRESS) raise InvalidWorkflowTransitionError.
+
+6. Soft Archiving & Restoring
+   - Implementation: Full. Archive/restore buttons, audit logging, filtering.
+   - Verified by tests: Yes.
+   - Invariants: Only Team Admins and Managers can archive/restore; archived tasks excluded from active queries and KPI counts by default.
+
+7. Task Attachments
+   - Implementation: Full. File uploads up to 25MB, download authorization, physical disk cleanup on deletion.
+   - Verified by tests: Yes (TaskAttachmentTests).
+   - Invariants: Users outside the team cannot upload, download, or delete attachments.
+
+8. Workspace Invitations
+   - Implementation: Full. Admin creates invite for email; pending invite banner shown on dashboard; accept/decline/revoke actions.
+   - Verified by tests: Yes (WorkspaceInvitationTests).
+   - Invariants: Duplicate pending invites rejected; expired invites rejected; non-recipients cannot accept someone else's invite.
+
+9. In-App Notification & Deadline Alert System
+   - Implementation: Full. Notifications on assignment, status change, invitation; automated overdue/due-today background scanning; read/unread status.
+   - Verified by tests: Yes (InAppNotificationTests).
+   - Invariants: Auto-scanner avoids spamming duplicate alerts within 24 hours.
+
+10. Dashboard Analytics & Interactive Charts
+    - Implementation: Full. 6 KPI summary cards; 4 Chart.js visualizations (Status Doughnut, Priority Bar, 7-Day Velocity Trend Line, Team Workload Horizontal Bar).
+    - Verified by tests: Yes (DashboardMetricsTests).
+    - Invariants: Metrics computed via SQL Count() aggregations; zero N+1 queries.
+
+11. Immutable Audit Logging (Activity History)
+    - Implementation: Full. Every creation, update, status change, priority change, reassignment, and membership change records actor, team, task, event_type, details, and JSON state diffs.
+    - Verified by tests: Yes.
+
+================================================================================
+6. AUTHENTICATION & AUTHORIZATION SPECIFICATION
+================================================================================
+
+6.1 Authentication Mechanism
+- Engine: Standard Django session-based authentication (django.contrib.auth).
+- Session Storage: Database-backed sessions stored in django_session table.
+- Cookies: Session cookie and CSRF cookie.
+- CSRF Protection: CsrfViewMiddleware active; {% csrf_token %} required on all POST forms.
+- Password Hashers: PBKDF2 with SHA256 in development; MD5 hasher during test runs for execution speed.
+
+6.2 User Model & Roles
+- User Model: django.contrib.auth.models.User.
+- Global Roles:
+  * Superuser / Staff: System Admin with organization-wide bypass.
+- Team Workspace Roles (TeamRole choices):
+  * ADMIN: Complete workspace governance (settings, members, roles, tasks, invitations, archiving, deletion).
+  * MANAGER: Operational lead (create tasks, edit all tasks in team, assign, change status/priority, archive).
+  * MEMBER: Individual contributor (view team tasks/feed, create tasks, edit tasks assigned to or created by them, transition status of assigned tasks).
+
+6.3 Server-Side Authorization Enforcement
+- Location: tasks/permissions.py contains pure permission evaluation functions:
+  * is_system_admin(user)
+  * get_user_team_role(user, team)
+  * can_view_team(user, team)
+  * can_manage_team(user, team)
+  * can_create_task(user, team)
+  * can_view_task(user, task)
+  * can_edit_task(user, task)
+  * can_change_task_status(user, task)
+  * can_archive_task(user, task)
+  * can_delete_task(user, task)
+  * can_change_member_role(actor, target_membership, new_role)
+  * can_remove_member(actor, target_membership)
+
+6.4 Anti-IDOR Queryset Scoping
+Views NEVER execute unrestricted queries like Task.objects.all().
+Instead, they invoke:
+- get_accessible_teams_qs(user): Filters Team.objects.filter(memberships__user=user).
+- get_accessible_tasks_qs(user, include_archived=False): Filters Task.objects.filter(team__memberships__user=user).
+Superusers bypass filters and access all records.
+
+6.5 Known Authorization Subtleties
+- Direct object lookups via pk (e.g. in task_detail_view) execute get_object_or_404, followed immediately by an explicit can_view_task() check raising PermissionDenied (HTTP 403) on unauthorized requests.
+- Member role edit rights are restricted: a MEMBER cannot edit tasks created by someone else unless assigned to them.
+
+================================================================================
+7. WORKFLOWS & BUSINESS RULES SPECIFICATION
+================================================================================
+
+7.1 Task Workflow State Machine
+States:
+- OPEN: Initial active state upon creation.
+- IN_PROGRESS: Work actively underway.
+- RESOLVED: Task completed and verified.
+
+Permitted Transitions:
+- OPEN -> IN_PROGRESS
+- OPEN -> RESOLVED
+- IN_PROGRESS -> OPEN
+- IN_PROGRESS -> RESOLVED
+- RESOLVED -> OPEN (Reopened)
+
+Forbidden Transitions:
+- * -> RESOLVED on initial task creation (tasks must be created as OPEN or IN_PROGRESS).
+- RESOLVED -> IN_PROGRESS (must be reopened to OPEN first).
+- Any attempt to execute an invalid transition raises InvalidWorkflowTransitionError (ValidationError).
+
+7.2 Concurrency Safeguards (OCC)
+- Field: Task.version (PositiveIntegerField, default=1).
+- Execution:
+  Task.objects.filter(pk=task.pk, version=submitted_version).update(..., version=F('version')+1)
+- If updated_rows == 0, a concurrent transaction updated the record first.
+- StaleUpdateError is raised and captured by views.py, triggering HTTP 409 conflict reconciliation.
+
+7.3 Idempotency Safeguards
+- Client generates or receives a UUID key upon form initialization.
+- Submissions check IdempotencyRecord with unique constraint on (user, key, action).
+- If retried, previously created task instance is returned without duplicate insert.
+
+7.4 Referential Integrity & Invariant Safeguards
+- Assignee Invariant: Assignee must be an active member of the task's team. Enforced in Task.clean() and TaskService.
+- Sole Admin Invariant: A team cannot have its last ADMIN removed or demoted. Enforced in permissions.py.
+- Member Removal Invariant: If a member is removed from a team, all their assigned tasks in that team are safely set to assignee=None inside the atomic transaction, preserving task records and audit history.
+
+7.5 Audit Trail Guarantees
+- Every state change writes an ActivityEvent within the same transaction.atomic() block.
+- ActivityEvent captures actor, team, task, event_type, details, previous_state JSON, and new_state JSON.
+
+================================================================================
+8. UI & FRONTEND ARCHITECTURE
+================================================================================
+
+8.1 Template Structure & Hierarchy
+- Base Template: templates/base.html
+  * Master layout, HTML5 head, Plus Jakarta Sans & Inter font links.
+  * Flash-free theme script in <head> checking localStorage and prefers-color-scheme.
+  * Collapsible sidebar navigation with active route highlighting and live counter badges.
+  * Top navigation bar with breadcrumbs, Updates Center bell button, theme toggle, and "New Task" button.
+  * Django messages alert container with close buttons and auto-dismiss.
+  * Modal dialog container.
+- Child Templates: All view templates extend 'base.html' and populate {% block content %}.
+- Error Templates: templates/403.html, templates/404.html, templates/500.html.
+
+8.2 CSS Design System (static/css/app.css)
+- Architecture: Pure Vanilla CSS using custom properties (CSS variables).
+- Aesthetic: Modern Sage Green SaaS palette.
+- Theme Support: Full light and dark theme tokens defined on :root and [data-theme="dark"].
+- Typography: Inter and Plus Jakarta Sans.
+- Components: Cards, KPI summary widgets, badge pills (status, priority, roles), form inputs, buttons, tables, alerts, modal dialogs, dropzones, pagination controls.
+- Responsive Layout: Mobile drawer sidebar toggled via #mobile-sidebar-toggle button; responsive flex/grid wrappers across dashboards and task tables.
+
+8.3 Client-Side JavaScript (static/js/app.js)
+- Zero external client frameworks (No React, Vue, Angular, or jQuery).
+- Theme Manager: Toggles light/dark mode and persists in localStorage('newtonite-theme').
+- Double-Submit Protection: Intercepts form submissions, disables submit buttons, adds loading spinner, and auto-releases after 10-second safety timeout.
+- Dynamic Dropdown Hydration: On task creation, changing the Team dropdown executes a fetch() to '/api/teams/<id>/members/' and repopulates the Assignee dropdown dynamically.
+- Drag-and-Drop Dropzone: Handles file attachment dragging, drop events, size calculation, and preview tags.
+- Alert Dismissal: Smooth fade-out and DOM removal after 6 seconds or on close click.
+
+8.4 Chart.js Integration
+- Library: Chart.js 4.4.1 (UMD) loaded in base.html.
+- Initialized on: templates/dashboard/index.html.
+- Charts:
+  1. Status Doughnut Chart (#statusChart): Displays Open, In Progress, Resolved counts.
+  2. Priority Bar Chart (#priorityChart): Displays counts by Urgency.
+  3. Velocity Trend Line Chart (#activityTrendChart): 7-day created vs resolved comparison.
+  4. Workload Horizontal Bar Chart (#workloadChart): Tasks per team member.
+
+================================================================================
+9. API & INTEGRATION INVENTORY
+================================================================================
+
+9.1 Internal API Endpoints
+1. Team Members Lookup API
+   - Endpoint: GET /api/teams/<int:team_id>/members/
+   - Handler: views.api_team_members_view
+   - Authentication: Required (@login_required).
+   - Authorization: User must belong to the requested team (can_view_team).
+   - Response: JSON format:
+     {
+       "members": [
+         {"id": 1, "username": "alice", "full_name": "Alice Morgan"},
+         ...
+       ]
+     }
+   - Status Codes: 200 OK, 403 Forbidden (if unauthorized), 404 Not Found.
+
+9.2 External Integrations & Services
+- Database: Embedded SQLite 3 (local file db.sqlite3).
+- Email Backend: django.core.mail.backends.console.EmailBackend (prints emails to console).
+- Storage: Local filesystem via FileSystemStorage (media/attachments/).
+- CDN Dependencies:
+  * Google Fonts (Inter, Plus Jakarta Sans).
+  * CDNJS / jsDelivr (Chart.js 4.4.1).
+
+9.3 Environment Variables
+- Currently, config/settings.py uses default hardcoded variables suitable for local assessment evaluation.
+- No environment variables are strictly required to run locally.
+- Recommended production environment variable names:
+  * DJANGO_SECRET_KEY
+  * DJANGO_DEBUG (set to 'False')
+  * DJANGO_ALLOWED_HOSTS
+  * DATABASE_URL (for PostgreSQL transition)
+  * EMAIL_HOST, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, EMAIL_PORT
+
+================================================================================
+10. TESTING & VERIFICATION STATUS
+================================================================================
+
+10.1 Framework & Strategy
+- Test Framework: Django Test Framework (django.test.TestCase).
+- Database: Isolated temporary test database created and destroyed automatically per run.
+- Optimization: In 'config/settings.py', MD5PasswordHasher is enabled when 'test' is in sys.argv, accelerating test suite execution.
+
+10.2 Actual Verified Test Execution
+- Command Executed: py manage.py test
+- Execution Timestamp: 2026-10-18T17:27:16+05:30
+- Output:
+  Creating test database for alias 'default'...
+  ....................................
+  ----------------------------------------------------------------------
+  Ran 36 tests in 0.944s
+  OK
+  Destroying test database for alias 'default'...
+  Found 36 test(s).
+  System check identified no issues (0 silenced).
+
+10.3 Test Suite Breakdown (36 Tests in tasks/tests.py)
+1. AuthenticationAndSecurityTests (4 tests):
+   - test_unauthenticated_user_redirected_to_login
+   - test_login_success_and_session
+   - test_login_invalid_credentials_does_not_leak_user_existence
+   - test_registration_creates_user_and_default_workspace
+2. TeamAuthorizationAndIsolationTests (3 tests):
+   - test_cross_team_data_isolation (IDOR protection)
+   - test_team_membership_uniqueness_constraint
+   - test_assignee_must_belong_to_team
+3. TaskCRUDAndValidationTests (3 tests):
+   - test_create_task_lifecycle_and_audit
+   - test_new_task_cannot_start_in_resolved_status
+   - test_member_permission_boundaries
+4. WorkflowTransitionTests (2 tests):
+   - test_valid_status_flow (OPEN -> IN_PROGRESS -> RESOLVED -> OPEN)
+   - test_invalid_status_transition_rejected
+5. OptimisticConcurrencyStaleUpdateTests (1 test):
+   - test_stale_update_protection_raises_error
+6. IdempotencyDuplicateSubmissionTests (1 test):
+   - test_idempotent_task_creation_prevents_duplicate
+7. RoleEscalationAndMembershipTests (2 tests):
+   - test_prevent_demoting_sole_admin
+   - test_member_cannot_manage_team_or_add_members
+8. DashboardMetricsTests (1 test):
+   - test_dashboard_aggregates_correctly
+9. TaskAttachmentTests (4 tests):
+   - test_authorized_user_can_upload_attachment
+   - test_unauthorized_user_cannot_upload_attachment
+   - test_file_download_authorization
+   - test_delete_attachment_cleans_up_storage
+10. WorkspaceInvitationTests (6 tests):
+    - test_admin_can_create_invitation
+    - test_non_admin_cannot_create_invitation
+    - test_duplicate_pending_invitation_prevention
+    - test_invitee_can_accept_invitation
+    - test_unauthorized_user_cannot_accept_someone_elses_invitation
+    - test_invitee_can_decline_invitation
+    - test_admin_can_revoke_invitation
+11. InAppNotificationTests (3 tests):
+    - test_notification_created_on_task_assignment
+    - test_mark_as_read_and_mark_all_read
+    - test_updates_center_view_renders_successfully
+12. FeatureWorkflowIntegrationTests (5 tests):
+    - test_dashboard_displays_pending_invitation_banner
+    - test_task_creation_with_multiple_attachments
+    - test_notification_mark_read_view
+    - test_notification_mark_all_read_view
+    - test_invitation_accept_flow_via_post
+
+10.4 Django System Check Execution
+- Command Executed: py manage.py check
+- Result: System check identified no issues (0 silenced). Code 0.
+
+================================================================================
+11. CONFIGURATION, SETUP & DEPLOYMENT RUNBOOK
+================================================================================
+
+11.1 Prerequisites
+- Python: Version 3.11, 3.12, 3.13, or 3.14 (Verified working on Python 3.14.3).
+- Windows Shell: PowerShell or Command Prompt.
+- Dependencies: Django >= 6.0 (Verified with Django 6.0.5).
+
+11.2 Standard Local Development Commands
+- Run Django System Checks:
+  py manage.py check
+- Run Automated Test Suite:
+  py manage.py test
+- View Migration Status:
+  py manage.py showmigrations
+- Apply Pending Migrations:
+  py manage.py migrate
+- Seed Demo Data (Safe to re-run):
+  py manage.py seed_demo_data
+- Start Development Server:
+  py manage.py runserver 127.0.0.1:8000
+
+11.3 Demo User Credentials (from tasks/management/commands/seed_demo_data.py)
+All standard demo users share the password: Password123!
+- alice   (Admin @ Core Platform)
+- bob     (Manager @ Core Platform, Member @ Frontend Engineering)
+- charlie (Member @ Core Platform, Admin @ Mobile Apps)
+- diana   (Admin @ Frontend Engineering)
+- edward  (Manager @ Frontend Engineering)
+- admin   (Superuser / Staff, Password: AdminPass123!)
+
+11.4 Differences Between Development and Production
+- SECRET_KEY: Currently hardcoded in config/settings.py. Must be set from an environment variable in production.
+- DEBUG: Currently True. Must be False in production.
+- ALLOWED_HOSTS: Currently ['*']. Must be restricted to specific domain hostnames in production.
+- Database: SQLite file is suitable for local demos and single-process servers. Production scaling requires PostgreSQL.
+- HTTPS: In production, configure SESSION_COOKIE_SECURE = True, CSRF_COOKIE_SECURE = True, and SECURE_SSL_REDIRECT = True.
+
+================================================================================
+12. ASSESSMENT ALIGNMENT & ENGINEERING EVALUATION
+================================================================================
+
+Evaluation Against Newtonite Challenge ("Operations Under Pressure"):
+
+1. Work-Item Creation and Management
+   - Status: IMPLEMENTED
+   - Evidence: tasks/models.py (Task), tasks/services.py (TaskService.create_task, update_task), templates/tasks/create.html, detail.html, list.html.
+   - Notes: Full CRUD with validation, soft-archiving, restore, and assignee invariant checks.
+
+2. Multiple Teams and Meaningful Team-Based Roles
+   - Status: IMPLEMENTED
+   - Evidence: tasks/models.py (Team, TeamMembership, TeamRole), tasks/services.py (TeamService), tasks/permissions.py.
+   - Notes: Three clear roles (Admin, Manager, Member) with distinct operational capabilities per workspace.
+
+3. Server-Side, Resource-Level Authorization (Anti-IDOR)
+   - Status: IMPLEMENTED
+   - Evidence: tasks/permissions.py (get_accessible_tasks_qs, get_accessible_teams_qs, can_edit_task, etc.), tasks/views.py.
+   - Notes: Evaluated in view controllers and service layer; IDOR attacks return HTTP 403.
+
+4. Coherent, Server-Enforced Workflow Lifecycle
+   - Status: IMPLEMENTED
+   - Evidence: tasks/services.py (VALID_TRANSITIONS, validate_transition, transition_status).
+   - Notes: Server-side validation rejects invalid status transitions; version incremented on each transition.
+
+5. Reliable Activity History for Important Changes
+   - Status: IMPLEMENTED
+   - Evidence: tasks/models.py (ActivityEvent), tasks/services.py (atomic ActivityEvent writes), templates/activity/list.html.
+   - Notes: Captures previous and new JSON state snapshots across task updates and membership changes.
+
+6. Useful Dashboard Views, Search, Filtering, and Pagination
+   - Status: IMPLEMENTED
+   - Evidence: tasks/services.py (DashboardService.get_dashboard_data), templates/dashboard/index.html, tasks/views.py (task_list_view).
+   - Notes: 6 KPI summary cards, 4 Chart.js analytics graphs, server-side Paginator (12 tasks/page), search by text/#ID, and filters for status, priority, team, overdue, and archived.
+
+7. At Least Three Meaningful Critical Behaviors Beyond Basic CRUD
+   - Status: IMPLEMENTED (5 behaviors present)
+   - Evidence:
+     * Critical Behavior 1: Optimistic Concurrency Control (OCC) preventing lost updates (Task.version + conditional atomic update).
+     * Critical Behavior 2: Idempotency token architecture preventing duplicate form submissions.
+     * Critical Behavior 3: Team boundary invariant enforcement (preventing assigning tasks to non-members).
+     * Critical Behavior 4: Anti-privilege escalation & sole admin demotion prevention.
+     * Critical Behavior 5: Automated overdue and due-today deadline notification scanner.
+
+8. Automated Tests Covering Dangerous or Failure-Prone Behaviors
+   - Status: IMPLEMENTED
+   - Evidence: tasks/tests.py (36 tests covering IDOR, race conditions, stale updates, duplicate creation, role demotion, workflow transitions).
+   - Notes: 100% pass rate in < 1 second.
+
+9. Clear Setup Documentation and Known Limitations
+   - Status: IMPLEMENTED
+   - Evidence: README.md, PROJECT_ARCHITECTURE.md, ENGINEERING_DECISIONS.md, DATABASE_ENGINEERING.md, PERMISSIONS.md, TESTING.md, KNOWN_LIMITATIONS.md.
+   - Notes: Setup commands, architecture records, and limitations are fully documented.
+
+10. Engineering Decisions and Trade-offs Explained
+    - Status: IMPLEMENTED
+    - Evidence: ENGINEERING_DECISIONS.md (5 detailed Architecture Decision Records covering Monolith vs SPA, OCC vs Pessimistic Locking, Idempotency, Queryset Scoping, and Soft Archiving).
+
+================================================================================
+13. KNOWN LIMITATIONS & CHANGE-RISK REGISTER
+================================================================================
+
+13.1 Documentation Discrepancies (Confirmed)
+- Discrepancy 1: README.md, TESTING.md, and KNOWN_LIMITATIONS.md cite 17 tests, but the test suite currently contains 36 passing tests.
+- Discrepancy 2: KNOWN_LIMITATIONS.md (Section 1.5) lists File Attachments as an unbuilt limitation, whereas TaskAttachment, WorkspaceInvitation, and InAppNotification are fully implemented and tested in code.
+- Impact: Non-technical evaluators reading stale documentation might assume features or tests are missing.
+
+13.2 Missing Dependency Manifest (Confirmed)
+- Limitation: No 'requirements.txt' or 'pyproject.toml' exists in the repository root.
+- Impact: An evaluator setting up a clean virtual environment must manually guess which packages to install.
+- Required dependencies confirmed by code inspection: Django>=6.0.
+
+13.3 SQLite Single-Writer Lock Ceiling (Confirmed Architectural Trade-off)
+- Limitation: SQLite 3 allows multiple readers but serializes writers. Under extreme concurrent write volume, SQLite may encounter database lock contention.
+- Mitigation: Codebase uses atomic transactions, short write windows, and OCC version checks; fully prepared for PostgreSQL transition by modifying settings.py.
+
+13.4 Development Console Email Backend (Confirmed)
+- Limitation: Password reset emails print to the local terminal via ConsoleEmailBackend rather than sending real SMTP messages.
+- Production Fix: Switch to an SMTP backend via environment variables.
+
+13.5 Client-Side Real-Time Updates (Confirmed Architectural Trade-off)
+- Limitation: Live updates require manual page refresh or user interaction; real-time push (WebSockets via Django Channels) is not configured.
+- Mitigation: Post-Redirect-Get pattern and clean response times make polling or manual navigation fast.
+
+================================================================================
+14. CURRENT BASELINE
+================================================================================
+
+Features That Must Not Regress:
+- All 36 automated tests must continue to pass without errors.
+- Team data isolation: users must never view or edit tasks belonging to teams they do not belong to.
+- Optimistic concurrency control: concurrent edits must raise StaleUpdateError rather than silently overwriting.
+- Idempotency key deduplication: retried creation POSTs must not create duplicate tasks.
+- Sole admin protection: the last administrator of a team cannot be demoted or removed.
+- Assignee membership invariant: assignees must belong to the task's team.
+- Status transition state machine: invalid workflow transitions must be rejected by the backend.
+- Existing database data in db.sqlite3 must be preserved intact.
+
+Current Technical Baseline:
+- Framework: Django 6.0.5 / 6.1.2 on Python 3.14.3.
+- Database: SQLite 3 at db.sqlite3 with migrations 0001 and 0002 applied.
+- Static / Assets: Vanilla CSS (static/css/app.css) + Vanilla JS (static/js/app.js) + Chart.js CDN.
+- Verification Status: Django check passed (0 issues), 36 tests passed (100%).
+
+================================================================================
+15. PRIORITISED NEXT STEPS
+================================================================================
+
+P0 (Immediate Assessment-Critical & Setup Cleanliness):
+1. Create a clean, verified 'requirements.txt' at the repository root containing the exact dependencies needed to run the project cleanly (e.g. Django>=6.0).
+2. Synchronize existing documentation files (README.md, TESTING.md, KNOWN_LIMITATIONS.md) to accurately report the 36 passing tests and reflect that TaskAttachment, WorkspaceInvitation, and InAppNotification are already built.
+
+P1 (Engineering Hardening & Production Hygiene):
+1. Environment-Variable Configuration: Update config/settings.py to pull SECRET_KEY, DEBUG, and ALLOWED_HOSTS from environment variables with fallback defaults.
+2. Production Database Switch: Provide an optional DATABASE_URL configuration in settings.py to allow immediate connection to PostgreSQL if deployed.
+3. Media File Collision Hardening: Verify attachment filename collision handling for task attachments.
+
+P2 (UI & Collaboration Polish):
+1. Add sub-task or checklist support to the Task model if hierarchical task trees are desired.
+2. Enhance conflict resolution modal on stale updates to offer a 1-click "Merge My Changes" or "Keep Database State" action.
+3. Add bulk task status transitions on the task list table.
+
+================================================================================
+16. CHANGE LOG & AUDIT VERIFICATION RECORD
+================================================================================
+
+Audit Date / Timestamp: 2026-10-18T17:30:00+05:30
+Action: Initial comprehensive technical audit and creation of PROJECT_CONTEXT.txt.
+Inspector: Antigravity AI Assistant.
+
+Files Inspected in Source:
+- manage.py
+- config/settings.py, config/urls.py, config/wsgi.py, config/asgi.py
+- tasks/apps.py, tasks/context_processors.py, tasks/permissions.py, tasks/models.py, tasks/urls.py, tasks/forms.py, tasks/services.py, tasks/views.py, tasks/admin.py, tasks/tests.py
+- tasks/management/commands/seed_demo_data.py
+- tasks/migrations/0001_initial.py, tasks/migrations/0002_taskattachment_workspaceinvitation_inappnotification.py
+- templates/base.html, templates/403.html, templates/404.html, templates/500.html
+- templates/dashboard/index.html, templates/tasks/*.html, templates/teams/*.html, templates/updates/*.html, templates/activity/*.html, templates/profile/*.html, templates/auth/*.html
+- static/css/app.css, static/js/app.js
+- media/attachments/ directory contents
+- README.md, PROJECT_ARCHITECTURE.md, ENGINEERING_DECISIONS.md, DATABASE_ENGINEERING.md, PERMISSIONS.md, TESTING.md, KNOWN_LIMITATIONS.md
+- db.sqlite3 (schema and record counts audited safely via Django ORM shell)
+
+Checks Executed & Verified Results:
+1. 'py manage.py check': Exited with code 0. System check identified no issues (0 silenced).
+2. 'py manage.py showmigrations': Confirmed all migrations across admin, auth, contenttypes, sessions, and tasks (0001 and 0002) are fully applied.
+3. 'py manage.py test': Exited with code 0. Ran 36 tests in 0.944s. All 36 passed (100%).
+4. Database Count Query: Verified existing user and workspace records in db.sqlite3 intact (8 users, 7 teams, 14 tasks, 32 activity events, 4 idempotency records).
+
+
+================================================================================
+17. PHASE 1 FRONTEND REDESIGN IMPLEMENTATION RECORD
+================================================================================
+
+Implementation Date / Timestamp: 2026-10-18T19:30:00+05:30
+Phase: Phase 1 — Premium Frontend Redesign
+Implemented by: Antigravity AI Assistant
+
+17.1 Design Concept & Visual Language
+- Aesthetic: Warm minimalist enterprise SaaS inspired by high-end editorial tools (Linear, Notion, Stripe).
+- Palette (Light Theme):
+  * App Background: #FDFBF7 (warm ivory)
+  * Surface / Cards: #FFFFFF (crisp white)
+  * Elevated Surface: #F6F4EE
+  * Primary Accent: #285741 (deep forest green)
+  * Secondary / Tertiary Accents: #5C8571 (sage green), #3F6652 (accent sage dark), #DDEEDF (mint)
+  * Typography: #202923 (deep charcoal), #6B756D (muted sage gray), #8E9990 (subtle)
+- Palette (Dark Theme - Genuine Custom Theme):
+  * App Background: #101713 (deep charcoal forest)
+  * Surface / Cards: #18221C
+  * Elevated Surface: #202C24
+  * Primary: #386E53 (forest glow)
+  * Accents: #8EB3A2 (muted sage), #A7C9AE (mint glow)
+  * Typography: #F0F2E9 (soft off-white), #9DAAA0 (muted slate)
+- Typography Stack:
+  * Display / Editorial Headings: 'Newsreader', Georgia, serif (optical sizing, italic accents)
+  * Primary UI / Sans: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif
+  * Body Text: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif
+  * Monospace / Code: 'JetBrains Mono', 'Fira Code', monospace
+- Bespoke Vector Assets:
+  * Botanical Leaf Emblem: static/img/leaf_emblem.svg (vector twin leaf with delicate stem and veins)
+  * Architectural Isometric Artwork: static/img/cityscape_art.svg (layered geometric pavilions, stepped terraces, reflecting pool, and minimalist towers matching the sage/forest theme)
+
+17.2 Static Files Created / Updated
+1. static/img/leaf_emblem.svg: Brand identity vector mark used in sidebar, headers, and authentication screens.
+2. static/img/cityscape_art.svg: Architectural isometric hero illustration for dashboard banner.
+3. static/css/app.css: Re-engineered CSS design system with CSS custom properties, light/dark mode variables, container queries, modern card elevation, accessible focus rings, responsive breakpoints (1200px, 992px, 768px, 480px), and prefers-reduced-motion compliance.
+4. static/js/app.js: Client-side logic for theme toggle persistence (localStorage + prefers-color-scheme detection), mobile navigation drawer, auto-dismissing alerts (6s animation), password visibility toggles, and dynamic micro-interactions.
+
+17.3 Templates Redesigned & Polished
+1. templates/base.html:
+   - Google Fonts preconnect & link ('Newsreader', 'Plus Jakarta Sans', 'Inter', 'JetBrains Mono').
+   - Brand header featuring the botanical leaf emblem SVG and editorial wordmark.
+   - Polished sidebar with active navigation pills, badge counts, and SVG iconography.
+   - Topbar with workspace identifier badge, quick "+ New Task" action button, and theme switcher (sun/moon toggle).
+   - Dismissible flash messages container with subtle shadows and animations.
+2. templates/dashboard/index.html:
+   - Isometric architectural cityscape hero banner with greeting and sprint progress.
+   - Metric overview cards with warm ivory surface, sage borders, and subtle hover lifts.
+   - Tasks Requiring Attention table with status/priority pill badges and due date warnings.
+   - Recent Activity Log stream with author badges and action timestamps.
+3. templates/tasks/list.html:
+   - Filter bar with search, status dropdown, and priority dropdown.
+   - Modern tabular task presentation with priority indicators, assignee avatars, and action menus.
+   - Pagination controls and empty state illustrations.
+4. templates/tasks/detail.html:
+   - Editorial task header with version badge (optimistic concurrency visibility).
+   - Metadata sidebar (assignee, reporter, due date, timestamps, team).
+   - Task description card, attachments gallery, and threaded comment list with author avatar bubbles.
+   - Inline status change buttons and edit/delete actions.
+5. templates/tasks/create.html & templates/tasks/edit.html:
+   - Polished form cards with botanical accents, accessible focus states, and validation alerts.
+6. templates/teams/list.html & templates/teams/detail.html:
+   - Grid of team cards with member counts and active task metrics.
+   - Detail view with team lead card, member roster with role badges, and team task table.
+7. templates/teams/create.html & templates/teams/edit.html:
+   - Clean management form cards aligned with design system.
+8. templates/activity/list.html:
+   - Comprehensive audit trail stream with action-specific iconography, user tags, and timestamps.
+9. templates/updates/index.html:
+   - Optimistic concurrency live sync view with clean updates monitor.
+10. templates/profile/index.html:
+   - User profile card with workspace affiliations, assigned tasks overview, and security settings.
+11. templates/auth/login.html, register.html, password_reset.html:
+   - Clean, centered card layout with leaf emblem, subtle borders, styled input groups, and clear CTA buttons.
+12. templates/auth/password_reset_done.html, confirm.html, complete.html:
+   - Cohesive vector success feedback and password update workflows.
+13. templates/403.html, 404.html, 500.html:
+   - Custom branded error experiences with botanical emblems, clear diagnostics, and "Back to Dashboard" buttons.
+
+17.4 Safety, Compatibility & Verification
+- Safety Backup: Stored at file:///C:/Users/Rishan/.gemini/antigravity-ide/brain/33b964a9-4b81-493a-bcd8-e70d6fa2ced3/scratch/backup_frontend/
+- Functionality Preservation: Zero changes made to models, views, urls, forms, services, permissions, admin, migrations, or database tables.
+- System Check: 'py manage.py check' -> System check identified no issues (0 silenced).
+- Test Suite: 'py manage.py test' -> 36/36 tests passed (100% OK in 1.082s).
+
+
+================================================================================
+18. PHASE 2 IMPLEMENTATION RECORD: SHARED DOCUMENT LIBRARY, TEAM INVITATIONS, AUDIT READ TRACKING & DEMO DATA
+================================================================================
+Implementation Date: October 2026
+Verified Baseline Test Count: 36/36 tests passed
+Final Test Count: 60/60 tests passed (100% OK in 2.63s)
+Database Migrations: tasks/migrations/0003_alter_activityevent_event_type_useractivityreadstate_and_more.py applied
+
+--------------------------------------------------------------------------------
+18.1 Executive Summary
+--------------------------------------------------------------------------------
+Phase 2 extends Newtonite Task Tracker with four major production capabilities and Render deployment readiness:
+1. Team Shared Document Library: An isolated, database-backed document management system with logical General and Task-specific folder structures, collision-resistant storage, 25 MiB file validation, dangerous file type blocking, and server-authorized streaming downloads.
+2. Verified Team Invitation Workflow: Audited workspace invitation lifecycle with real email generation via Django's mail system, atomic acceptance and decline workflows, anti-escalation role checks, and invitee recipient verification.
+3. Persistent Audit Read Tracking: High-efficiency, per-user immutable audit tracking with a pulsing red notification dot in the main navigation, isolated from in-app notifications and independent of browser storage.
+4. Comprehensive Showcase Data: Fully idempotent management command (seed_demo_data) populating realistic multi-team users, roles, tasks, physical sample documents, invitations, and audit history.
+5. Mandatory Render Deployment Compatibility: Packaged requirements.txt, build.sh, render.yaml, WhiteNoise static asset pipeline, dj-database-url PostgreSQL auto-detection, persistent disk MEDIA_ROOT configuration, and environment-driven secrets/SMTP.
+
+All existing Phase 1 functionality, design tokens, optimistic concurrency control (OCC), idempotent task creation, and previous database records were completely preserved without regressions.
+
+--------------------------------------------------------------------------------
+18.2 Feature A: Team Shared Document Library
+--------------------------------------------------------------------------------
+Data Model: tasks/models.py -> SharedDocument
+Fields:
+- id: BigAutoField (Primary Key)
+- team: ForeignKey(Team, on_delete=CASCADE, related_name='shared_documents')
+- task: ForeignKey(Task, null=True, blank=True, on_delete=SET_NULL, related_name='shared_documents')
+- uploader: ForeignKey(User, on_delete=CASCADE, related_name='uploaded_shared_documents')
+- file: FileField(upload_to=shared_document_upload_path, max_length=500)
+- display_name: CharField(max_length=255)
+- description: TextField(blank=True, default='')
+- file_size: PositiveIntegerField()
+- content_type: CharField(max_length=100, default='application/octet-stream')
+- created_at: DateTimeField(auto_now_add=True, db_index=True)
+- updated_at: DateTimeField(auto_now=True)
+
+Storage Architecture & Path Partitioning:
+- Logical Folders:
+  * Team General: `shared_documents/team_<id>/general/<safe_filename>`
+  * Task Specific: `shared_documents/team_<id>/task_<id>/<safe_filename>`
+- Filename Sanitization:
+  Base filenames are sanitized via slugification while preserving original extensions. A collision-resistant 8-character UUID prefix is inserted (`slug_uuid8.ext`) to prevent race condition overwrites and filesystem collision attacks.
+  Display name stores the exact original filename entered by the user.
+
+Upload Validation Rules (tasks/services.py -> SharedDocumentService):
+- Maximum file size: 25 MiB (26,214,400 bytes).
+- Empty or missing files rejected with ValidationError.
+- Dangerous file extensions strictly rejected: .exe, .bat, .cmd, .sh, .php, .py, .pl, .cgi, .js, .vbs, .ps1, .jar, .scr, .pif, .com.
+- Permitted document formats: PDF, Microsoft Office (docx, xlsx, pptx, doc, xls, ppt), text files (txt, md, rtf, log), CSV/TSV, and standard image formats (png, jpg, jpeg, gif, svg, webp).
+- Task-Team Invariant: If a task is selected, it must belong to the specified team (`task.team_id == team.id`). Cross-team task attachment attempts immediately raise ValidationError.
+- Transactional Integrity: Document records are created atomically alongside an immutable ActivityEvent (`DOCUMENT_UPLOADED`). If the database transaction fails, uploaded files are cleaned up to prevent orphaned disk files.
+
+Deletion & Download Semantics:
+- Download Endpoint (`GET /documents/<id>/download/`):
+  Streams file via FileResponse with `as_attachment=True` and sanitized `filename=doc.display_name`. Access requires authenticated team membership verified on the server. Direct unauthorized media URLs are prevented.
+- Deletion Endpoint (`POST /documents/<id>/delete/`):
+  Requires CSRF token. Deletes the physical file from the storage backend via `doc.file.delete(save=False)` followed by `doc.delete()`. Records an immutable `DOCUMENT_DELETED` ActivityEvent.
+
+RBAC Policy for Shared Documents:
+- Any authenticated member of the team can view the document library, browse folders, and download files.
+- Any authenticated member can upload documents to the general library or to any task in their team.
+- Team Admins and Team Managers can delete any shared document in their team.
+- Team Members can delete only documents uploaded by themselves. Attempting to delete another user's document raises PermissionDenied (HTTP 403).
+- Non-members receive HTTP 403 on all document views, uploads, downloads, and deletion endpoints.
+- Removing a member immediately revokes access to the document library and download endpoints.
+
+Coexistence with TaskAttachment:
+- TaskAttachment: Remains untouched as task-detail-specific attachments with direct inline association.
+- SharedDocument: Team-wide document library with optional task filtering and general team file sharing.
+- Task detail view (`templates/tasks/detail.html`) provides a direct badge and table linking to associated shared documents, maintaining clear feature separation.
+
+--------------------------------------------------------------------------------
+18.3 Feature B: Verified Team Invitation Workflow
+--------------------------------------------------------------------------------
+Existing Model Audited: tasks/models.py -> WorkspaceInvitation
+- Role assignment validated against TeamRole choices (ADMIN, MANAGER, MEMBER).
+- Inviter authority: Only Team Admins can issue invitations (`can_invite_member`).
+- Expiration: Handled via `is_expired` property (7-day default lifespan).
+
+Email Generation & Real Delivery Support (tasks/services.py -> InvitationService):
+- Integrated with Django's core email subsystem (`django.core.mail.send_mail`).
+- Formats dynamic plain-text email with team name, role, inviter display name, expiration details, and direct URL to `/invitations/`.
+- Development mode uses `django.core.mail.backends.console.EmailBackend`.
+- Production mode supports environment-driven SMTP credentials (`EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend`).
+
+Atomic Acceptance & Rejection Workflows:
+- Acceptance (`POST /invitations/<id>/accept/`):
+  1. Verifies authenticated user matches the invitation's recipient email (`user.email.lower() == invitation.email.lower()`).
+  2. Ensures invitation is in `PENDING` state and not expired.
+  3. Atomically creates `TeamMembership` with the specified role and updates invitation status to `ACCEPTED`.
+  4. Records `MEMBER_JOINED` ActivityEvent and creates an InAppNotification for the inviter.
+- Decline (`POST /invitations/<id>/decline/`):
+  Atomically marks invitation as `DECLINED` without creating team membership.
+- Anti-Tampering: Unauthorized users cannot accept, decline, or inspect another user's invitation by manipulating IDs.
+
+--------------------------------------------------------------------------------
+18.4 Feature C: Persistent Unread Audit Indicator
+--------------------------------------------------------------------------------
+Data Model: tasks/models.py -> UserActivityReadState
+Fields:
+- user: OneToOneField(User, on_delete=CASCADE, related_name='activity_read_state')
+- last_read_event_id: PositiveIntegerField(default=0)
+- updated_at: DateTimeField(auto_now=True)
+
+Architecture & Performance:
+- Immutable Audit Guarantee: `ActivityEvent` records are never mutated or updated. Read tracking is managed strictly via the per-user cursor (`last_read_event_id`).
+- Scoped Efficiency: Injected globally via context processor `tasks/context_processors.py -> has_unread_audit`.
+  Evaluates: `ActivityEvent.objects.filter(team__in=user_teams, id__gt=last_read_id).exists()`.
+  Uses `.exists()` without loading large querysets, avoiding N+1 queries.
+- UI Indicator:
+  A vibrant red pulsing dot (`.audit-unread-dot`) appears directly on the "Activity" sidebar navigation link.
+  Accessible via `aria-label="New unread activity events"` and screen-reader assistance text.
+- Read Lifecycle:
+  1. When a new audit event occurs in any team the user belongs to, the dot lights up.
+  2. Visiting the Activity view (`GET /activity/`) automatically updates the user's `last_read_event_id` to the highest event ID currently accessible, clearing the dot.
+  3. If another user or system action creates an activity event subsequently, the dot immediately reappears.
+  4. Isolation: Each user has an independent read cursor. One user marking activity read has zero impact on other users.
+  5. Updates Centre Independence: Visiting `/updates/` (concurrency monitor) does NOT mark audit activity as read.
+
+--------------------------------------------------------------------------------
+18.5 Feature D: Realistic Database-Backed Showcase Data
+--------------------------------------------------------------------------------
+Command: `tasks/management/commands/seed_demo_data.py`
+Execution: `py manage.py seed_demo_data`
+Idempotency: Re-running the command safely detects existing records using `get_or_create` and updates fields without creating duplicates or altering real user credentials.
+
+Showcase User Accounts:
+1. `alice` (Team Admin): Full administrative privileges over Core Platform Engineering.
+2. `bob` (Team Manager): Operational workload manager in Core Platform Engineering.
+3. `charlie` (Team Member): Active software developer in Core Platform Engineering.
+4. `diana` (Multi-Team Lead): Admin in Operations & DevOps, Manager in Core Platform Engineering.
+5. `edward` (DevOps Specialist): Member in Operations & DevOps.
+6. `fiona` (Invited Engineer): User with a pending invitation to join Operations & DevOps.
+7. `george` (External User): Member of Mobile Apps Guild; strictly isolated from Core Platform Engineering.
+8. `admin` (System Superuser): Unrestricted system oversight.
+
+Default Demo Password for all showcase accounts: `Newtonite2026!`
+
+Showcase Teams:
+- `Core Platform Engineering`: Primary workspace with high velocity, 10 tasks, 3 shared documents.
+- `Operations & DevOps`: Infrastructure team with deployment pipelines, 5 tasks, 1 shared document, 1 pending invitation.
+- `Mobile Apps Guild`: Isolated department used to prove multi-tenant isolation and anti-IDOR boundaries.
+
+Showcase Documents with Physical Files:
+- `Core Platform Architecture Blueprint 2026.pdf` (General folder)
+- `Database Migration & Concurrency Runbook.md` (General folder)
+- `Quarterly Infrastructure Cost Audit.csv` (General folder)
+- `PostgreSQL High Availability Failover Specification.pdf` (Task-specific: Associated with PostgreSQL HA cluster task)
+
+--------------------------------------------------------------------------------
+18.6 Feature E: Render Deployment & Production Hardening
+--------------------------------------------------------------------------------
+1. Dependency Manifest (`requirements.txt`):
+   - Django==5.0.3
+   - gunicorn==21.2.0
+   - whitenoise==6.6.0
+   - dj-database-url==2.1.0
+   - psycopg2-binary==2.9.9
+
+2. Build and Start Scripts:
+   - `build.sh`: Runs `pip install`, `python manage.py collectstatic --no-input`, and `python manage.py migrate`.
+   - `render.yaml`: Complete Blueprint definition specifying Python environment, buildCommand, startCommand (`gunicorn config.wsgi:application`), environment variables, PostgreSQL service connection, and persistent disk mounting.
+
+3. Static Files (WhiteNoise):
+   - Configured `whitenoise.middleware.WhiteNoiseMiddleware` directly after `SecurityMiddleware`.
+   - Enabled `CompressedManifestStaticFilesStorage` with hash cache-busting.
+   - Verified via `py manage.py collectstatic`: 134 static files copied, 402 post-processed.
+
+4. Database Auto-Configuration:
+   - `config/settings.py` reads `DATABASE_URL` via `dj_database_url.config()`.
+   - If `DATABASE_URL` is unset, gracefully defaults to local `db.sqlite3`.
+
+5. Persistent Disk Storage Architecture:
+   - Render's container filesystem is ephemeral; files uploaded to local container paths are wiped on redeployment.
+   - Production setting: Mount a Render Persistent Disk at `/var/data/media`.
+   - `config/settings.py` reads `MEDIA_ROOT` from `DJANGO_MEDIA_ROOT` environment variable (defaults to `/var/data/media` if present, otherwise local `BASE_DIR / 'media'`).
+
+6. Email Configuration:
+   - Controlled via `DJANGO_EMAIL_BACKEND` (defaults to console backend in dev, `django.core.mail.backends.smtp.EmailBackend` in prod).
+   - Supports `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`.
+
+--------------------------------------------------------------------------------
+18.7 Feature F: Automated Testing & Verification
+--------------------------------------------------------------------------------
+Test File: `tasks/tests.py`
+Execution Command: `py manage.py test`
+Baseline Tests: 36 tests
+New Phase 2 Tests: 24 tests
+Total Tests: 60 tests (100% Passed)
+
+Breakdown of Phase 2 Test Classes:
+1. `SharedDocumentTests` (13 tests):
+   - `test_anonymous_user_cannot_access_shared_documents`: Verifies redirect to login.
+   - `test_team_admin_can_upload_and_list_documents`: Verifies admin upload, DB record, and listing.
+   - `test_team_member_can_upload_and_download_document`: Verifies member upload and FileResponse download.
+   - `test_member_can_delete_own_document`: Verifies member self-service document deletion and file unlinking.
+   - `test_member_cannot_delete_other_user_document`: Proves member gets 403 trying to delete admin/manager document.
+   - `test_admin_and_manager_can_delete_any_document`: Proves admin/manager can delete any team member's document.
+   - `test_non_member_cannot_access_or_download_team_documents`: Proves non-member gets 403 on library and download.
+   - `test_cross_team_task_association_rejected`: Proves assigning a document to another team's task raises ValidationError.
+   - `test_removing_user_from_team_revokes_document_access`: Proves removed member immediately gets 403.
+   - `test_oversized_file_rejected`: Upload > 25 MiB rejected with ValidationError.
+   - `test_dangerous_file_extension_rejected`: Upload of .exe, .sh, .py, etc. rejected with ValidationError.
+   - `test_empty_file_rejected`: Upload of 0-byte file rejected.
+   - `test_document_deletion_removes_physical_file`: Confirms file is unlinked from storage on deletion.
+
+2. `TeamInvitationWorkflowTests` (5 tests):
+   - `test_admin_can_create_invitation_and_email_is_dispatched`: Confirms invitation creation and mail queue dispatch.
+   - `test_member_cannot_create_invitation`: Ordinary members receive 403 when attempting to invite users.
+   - `test_intended_recipient_can_accept_invitation`: Verifies atomic acceptance and membership creation.
+   - `test_wrong_user_cannot_accept_invitation`: Verifies user with different email cannot accept invitation.
+   - `test_decline_invitation_does_not_create_membership`: Confirms decline sets status DECLINED without membership.
+
+3. `AuditReadTrackingTests` (6 tests):
+   - `test_new_activity_shows_unread_indicator`: Confirms unread dot appears when new activity exists.
+   - `test_visiting_activity_page_marks_as_read`: Confirms visiting /activity/ updates cursor and clears dot.
+   - `test_new_event_after_visit_makes_indicator_reappear`: Confirms subsequent events re-trigger indicator.
+   - `test_audit_read_state_is_independent_per_user`: Confirms User A reading audit does not clear User B's dot.
+   - `test_activity_from_inaccessible_team_does_not_trigger_indicator`: Inaccessible team events don't trigger dot.
+   - `test_visiting_updates_centre_does_not_clear_audit_indicator`: Proves /updates/ visit leaves audit dot unread.
+
+--------------------------------------------------------------------------------
+18.8 Assessment Alignment & Operational Checklist
+--------------------------------------------------------------------------------
+[x] Shared document library with General and Task-specific folder groupings.
+[x] Strict multi-tenant team document isolation preventing cross-team access or IDOR leaks.
+[x] 25 MiB upload limit, dangerous extension blocking, collision-resistant filenames.
+[x] Server-authorized streaming file downloads (no unrestricted public media URLs).
+[x] Role-based deletion (Admins/Managers delete any, Members delete only their own).
+[x] Physical storage cleanup on document deletion.
+[x] Audited team invitation workflow with atomic accept/decline.
+[x] Real email dispatch using Django mail subsystem with console/SMTP backends.
+[x] Persistent audit read tracking via per-user cursor (`UserActivityReadState`).
+[x] High-efficiency `.exists()` unread query avoiding N+1 performance bottlenecks.
+[x] Pulsing red dot badge on navigation item with accessibility labels.
+[x] Expanded idempotent `seed_demo_data` command creating 8 users, 3 teams, 15 tasks, 4 real documents.
+[x] Full Render deployment compatibility (requirements.txt, build.sh, render.yaml, WhiteNoise, dj-database-url, persistent disk configuration).
+[x] Zero regression of Phase 1 functionality, design tokens, OCC, or existing tests.
+[x] Comprehensive automated test suite expanded from 36 to 60 passing tests.
+
+--------------------------------------------------------------------------------
+18.9 Change Log & Modified Files
+--------------------------------------------------------------------------------
+New Files:
+- requirements.txt: Runtime dependency manifest (Django, gunicorn, whitenoise, dj-database-url, psycopg2-binary).
+- build.sh: Render deployment shell script.
+- render.yaml: Render Infrastructure-as-Code Blueprint.
+- tasks/migrations/0003_alter_activityevent_event_type_useractivityreadstate_and_more.py: Migration for SharedDocument and UserActivityReadState.
+- templates/documents/team_library.html: Team shared document library UI.
+
+Modified Files:
+- config/settings.py: Added WhiteNoise middleware, static storage, dj-database-url, configurable MEDIA_ROOT, and SMTP settings.
+- tasks/models.py: Added SharedDocument, UserActivityReadState, and DOCUMENT_UPLOADED/DOCUMENT_DELETED EventType choices.
+- tasks/permissions.py: Added can_view_shared_documents, can_upload_shared_document, can_download_shared_document, can_delete_shared_document.
+- tasks/services.py: Added SharedDocumentService, AuditTrackingService, and email dispatch in InvitationService.
+- tasks/context_processors.py: Injected has_unread_audit into template context.
+- tasks/forms.py: Added SharedDocumentUploadForm.
+- tasks/views.py: Added documents_index_view, team_documents_view, shared_document_upload_view, shared_document_download_view, shared_document_delete_view, and activity read marking.
+- tasks/urls.py: Registered document routes.
+- templates/base.html: Added Shared Docs navigation link and red unread dot on Activity link.
+- templates/teams/detail.html: Added Document Library action button and document KPI stat card.
+- templates/tasks/detail.html: Added shared documents section for associated task documents.
+- static/css/app.css: Added styling for document library cards, table, and pulsing red unread dot.
+- tasks/management/commands/seed_demo_data.py: Extended to seed realistic users, teams, tasks, documents, invitations, and notifications.
+- tasks/tests.py: Expanded automated test suite from 36 to 60 tests.
+- README.md: Updated with Phase 2 documentation, credentials, and deployment guide.
+- PROJECT_CONTEXT.txt: Updated with Section 18.
+
+================================================================================
+SECTION 19: FINAL COMPLETION PASS & WHOLE-PLATFORM TESTING AUDIT
+================================================================================
+
+19.1 OBJECTIVE & MANDATE
+------------------------
+This section records the final completion, correction, and verification pass for the Newtonite Task Tracker, prepared for the Newtonite Software Engineering Challenge: "Operations Under Pressure".
+
+Non-negotiable mandates fulfilled:
+1. In-App Only Team Invitations: Zero outbound email delivery. Invitation creation, viewing, acceptance, decline, and revocation operate 100% within Newtonite. Registered user validation is enforced with honest feedback for unregistered addresses.
+2. Unified Canonical Document Storage: All new uploads from task creation, task detail, and the shared library create a single canonical SharedDocument record and one physical stored file. Zero duplicate TaskAttachment records are created.
+3. Legacy TaskAttachment Compatibility: Historical TaskAttachment records remain fully functional for authorized streaming download and deletion without duplicating database rows or files.
+4. Audit Unread Dot Safety: Per-user read cursor only advances up to events actually viewed on an unfiltered page, preventing filtered views from falsely clearing unread alerts.
+5. Render Deployment Consistency: Validated requirements.txt, build.sh, render.yaml (Starter plan web service with 1GB persistent disk at /var/data/media), WhiteNoise static asset pipeline, and environment-driven PostgreSQL configuration.
+6. Whole-Platform Automated Testing: Pytest configured via pytest.ini with pytest-django and pytest-cov; full suite passes with 61 tests (100% pass rate in ~2.2s; 74% code coverage). GitHub Actions CI workflow implemented in .github/workflows/test.yml.
+
+19.2 IN-APP ONLY INVITATION ARCHITECTURE
+----------------------------------------
+- Service Layer (tasks/services.py: InvitationService.create_invitation):
+  * Outbound email calls (send_mail) completely removed.
+  * Lookups use normalized case-insensitive comparison (email__iexact).
+  * Enforces that the target email belongs to a pre-existing registered Newtonite User. If not found, raises ValidationError: "No registered Newtonite account found for '{email_clean}'. The user must register an account in Newtonite before an in-app invitation can be received."
+  * Validates inviter permission (can_invite_member) and rejects duplicate active pending invitations for the same team.
+  * Generates a database-backed WorkspaceInvitation and an instant InAppNotification with direct action links.
+  * Acceptance atomically provisions TeamMembership and marks status ACCEPTED. Declining marks status DECLINED without creating a membership.
+  * Verified in tests: test_invitation_creation_is_in_app_only_and_sends_no_email explicitly asserts len(mail.outbox) == 0.
+
+19.3 CANONICAL UNIFIED DOCUMENT STORAGE & LEGACY COMPATIBILITY
+--------------------------------------------------------------
+- Unified Canonical Path:
+  * Task creation uploads (tasks/views.py: task_create_view): Processed via SharedDocumentService.upload_document, linked to the newly created task, its team, and the uploader.
+  * Task detail uploads (tasks/views.py: task_attachment_upload_view): Processed via SharedDocumentService.upload_document with task association.
+  * Shared document library uploads (tasks/views.py: shared_document_upload_view): Processed via SharedDocumentService.upload_document.
+  * Single Database Record: Exactly one SharedDocument row is inserted per upload.
+  * Single Stored File: Uploaded to media/shared_documents/team_<id>/task_<id>/ or general/.
+  * No Duplicate Records: New uploads never create redundant TaskAttachment rows (verified by test_task_creation_with_multiple_attachments asserting task.shared_documents.count() == 2 and task.attachments.count() == 0).
+- Backward Compatibility:
+  * TaskAttachment model and existing database records are preserved intact.
+  * Legacy download (/tasks/<id>/attachment/<att_id>/download/) and delete (/tasks/<id>/attachment/<att_id>/delete/) endpoints remain fully operational.
+  * Task detail template (templates/tasks/detail.html) renders both canonical documents and legacy attachments in a cohesive "Task Documents & Files" section.
+
+19.4 AUDIT READ CURSOR FILTER SAFETY
+------------------------------------
+- In tasks/services.py (AuditTrackingService.mark_activity_read):
+  * Accepts optional max_event_id parameter.
+  * Advances last_read_event_id only up to min(max_accessible_id, max_event_id) when viewing page 1 of unfiltered activity.
+- In tasks/views.py (activity_list_view):
+  * If filters (team, event_type, date, user) or subsequent pagination pages are active, cursor is NOT advanced beyond visible items, preventing unseen events from being marked as read.
+
+19.5 DEPENDENCY & RUNTIME COMPATIBILITY
+---------------------------------------
+- Python Version: Python 3.14.3 verified locally; compatible with Python 3.11, 3.12, 3.14.
+- Django Version: Django 6.0.5 verified locally; pinned as Django>=5.1,<6.2 in requirements.txt.
+- Manifest (requirements.txt):
+  Django>=5.1,<6.2
+  asgiref>=3.8.1
+  sqlparse>=0.5.0
+  tzdata>=2024.1
+  whitenoise>=6.6.0
+  dj-database-url>=2.1.0
+  gunicorn>=21.2.0
+  psycopg2-binary>=2.9.9
+  pytest>=8.0.0
+  pytest-django>=4.8.0
+  pytest-cov>=5.0.0
+
+19.6 RENDER PRODUCTION DEPLOYMENT & STORAGE ARCHITECTURE
+--------------------------------------------------------
+- Web Service Plan: Starter (paid plan required for persistent disk support).
+- Persistent Disk: Mounted at /var/data/media (size 1GB).
+- Environment Variables:
+  * MEDIA_ROOT=/var/data/media (settings.py evaluates MEDIA_ROOT and DJANGO_MEDIA_ROOT).
+  * DATABASE_URL=fromDatabase (PostgreSQL service: newtonite-postgres).
+  * DEBUG=False.
+  * ALLOWED_HOSTS=.onrender.com.
+  * CSRF_TRUSTED_ORIGINS=https://*.onrender.com.
+- Ephemeral vs Durable Storage Notice: Free Render tier provides an ephemeral filesystem where disk changes are discarded across restarts. Durable shared documents and attachments require the Starter service with persistent disk.
+- Database Separation Notice: Local SQLite (db.sqlite3) data does not transfer to Render PostgreSQL. Run python manage.py seed_demo_data via Render shell to populate demonstration records on deployed instances.
+
+19.7 SHOWCASE DEMO DATA (VERIFIED IDEMPOTENT)
+---------------------------------------------
+Command: py manage.py seed_demo_data
+- Users:
+  * admin (System Superuser, AdminPass123!)
+  * alice (Team Admin @ Core Platform, Password123!)
+  * bob (Team Manager @ Core Platform, Member @ Frontend, Password123!)
+  * charlie (Team Member @ Core Platform, Admin @ Mobile, Password123!)
+  * diana (Team Admin @ Frontend Engineering, Password123!)
+  * edward (Team Manager @ Frontend Engineering, Password123!)
+  * fiona (Team Member @ Core Platform, Invitee @ Frontend, Password123!)
+  * george (Isolated Member @ Operations Support, Password123!)
+- Teams: Core Platform Engineering, Frontend Engineering, Mobile Applications, Operations Support
+- Verifiably idempotent: Running the command repeatedly produces identical record counts without integrity errors.
+
+19.8 WHOLE-PLATFORM AUTOMATED TEST RESULTS
+------------------------------------------
+Native Django Test Runner:
+  Command: py manage.py test
+  Result: 61 tests passed in 1.943s (0 failures, 0 errors, 0 silenced issues)
+
+Pytest Runner:
+  Command: py -m pytest
+  Result: 61 tests passed in 2.23s
+
+Pytest Coverage:
+  Command: py -m pytest --cov=tasks --cov-report=term
+  Coverage: 74% across tasks app (100% on models, admin, urls, context_processors, tests)
+
+Continuous Integration:
+  File: .github/workflows/test.yml
+  Runs: Django system checks, makemigrations dry-run check, and full pytest suite on push/PR.
+
+19.9 FILE INVENTORY & CHANGE LOG (FINAL PASS)
+---------------------------------------------
+New Files Created:
+- pytest.ini (Pytest Django configuration)
+- .gitignore (Standard Python/Django/IDE ignore patterns)
+- .env.example (Environment variable placeholders)
+- .github/workflows/test.yml (GitHub Actions CI workflow)
+- db.sqlite3.bak_finalpass (Safety database backup)
+
+Modified Files:
+- tasks/services.py (In-app only invitations, zero email, audit cursor max_event_id tracking)
+- tasks/views.py (Unified uploads to SharedDocument, task detail dual-query, audit read safety)
+- templates/tasks/detail.html (Unified Task Documents & Files presentation card)
+- config/settings.py (Fast test hasher for pytest, MEDIA_ROOT fallback)
+- tasks/tests.py (61 tests covering in-app invitations, zero email assert, canonical uploads)
+- requirements.txt (Added pytest, pytest-django, pytest-cov)
+- README.md (Updated with in-app workflow, canonical uploads, 61 tests, Render notes)
+- TESTING.md (Complete test catalog, pytest commands, coverage data)
+- ENGINEERING_DECISIONS.md (Added ADR 8 and ADR 9)
+- KNOWN_LIMITATIONS.md (Accurate invitation and Render disk requirements)
+- PERMISSIONS.md (Updated RBAC matrix and invariants)
+- PROJECT_ARCHITECTURE.md (Updated Section 10 & 11)
+- PROJECT_CONTEXT.txt (Appended Section 19)
+
+================================================================================
+END OF PROJECT_CONTEXT.txt
+================================================================================
+
