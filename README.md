@@ -5,7 +5,7 @@
 
 ## 🚀 Live Demo
 
-**Live Application:** [Open Newtonite Task Tracker](http://13.61.21.114/login/)
+**Live Application:** [Open Newtonite Task Tracker](http://13.61.21.114/login/) http://13.61.21.114/login/
 
 **Demo Credentials**
 - **Username:** `alice`
