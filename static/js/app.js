@@ -149,29 +149,53 @@
         var teamId = this.value;
         if (!teamId) {
           assigneeSelect.innerHTML = '<option value="">Unassigned</option>';
+          assigneeSelect.disabled = false;
           return;
         }
 
+        // Show loading feedback and disable select while loading
+        var currentVal = assigneeSelect.value;
+        assigneeSelect.disabled = true;
+        assigneeSelect.innerHTML = '<option value="">Loading team members...</option>';
+
         fetch('/api/teams/' + encodeURIComponent(teamId) + '/members/')
           .then(function (response) {
-            if (!response.ok) throw new Error('Failed to fetch members');
+            if (!response.ok) {
+              throw new Error('Server returned HTTP ' + response.status);
+            }
             return response.json();
           })
           .then(function (data) {
-            var currentVal = assigneeSelect.value;
-            assigneeSelect.innerHTML = '<option value="">Unassigned</option>';
-            data.members.forEach(function (member) {
-              var opt = document.createElement('option');
-              opt.value = member.id;
-              opt.textContent = member.full_name + ' (@' + member.username + ')';
-              if (String(member.id) === String(currentVal)) {
-                opt.selected = true;
-              }
-              assigneeSelect.appendChild(opt);
-            });
+            assigneeSelect.disabled = false;
+            assigneeSelect.innerHTML = '';
+
+            var defaultOpt = document.createElement('option');
+            defaultOpt.value = '';
+            defaultOpt.textContent = 'Unassigned';
+            assigneeSelect.appendChild(defaultOpt);
+
+            if (data.members && data.members.length > 0) {
+              data.members.forEach(function (member) {
+                var opt = document.createElement('option');
+                opt.value = member.id;
+                opt.textContent = member.full_name + ' (@' + member.username + ')';
+                if (String(member.id) === String(currentVal)) {
+                  opt.selected = true;
+                }
+                assigneeSelect.appendChild(opt);
+              });
+            } else {
+              var emptyOpt = document.createElement('option');
+              emptyOpt.value = '';
+              emptyOpt.textContent = '(No eligible members found in team)';
+              emptyOpt.disabled = true;
+              assigneeSelect.appendChild(emptyOpt);
+            }
           })
           .catch(function (err) {
             console.warn('Assignee fetch warning:', err);
+            assigneeSelect.disabled = false;
+            assigneeSelect.innerHTML = '<option value="">Unassigned (Could not load team members)</option>';
           });
       });
     }

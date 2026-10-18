@@ -1404,6 +1404,72 @@ Modified Files:
 - PROJECT_CONTEXT.txt (Appended Section 19)
 
 ================================================================================
+20. STABILIZATION, STATIC STORAGE REPAIR & REGRESSION AUDIT PASS
+================================================================================
+
+20.1 ROOT CAUSE ANALYSIS & STATIC MANIFEST REPAIR
+------------------------------------------------
+1. WhiteNoise CompressedManifestStaticFilesStorage Missing Manifest Entry:
+   - Root Cause: WhiteNoise's CompressedManifestStaticFilesStorage requires a pre-built
+     manifest ('staticfiles.json') generated via 'collectstatic'. During automated test runs
+     (pytest and django test), tests rendered templates calling `{% static 'img/leaf_emblem.svg' %}`.
+     Because STATICFILES_STORAGE pointed to CompressedManifestStaticFilesStorage and no pre-built
+     manifest was guaranteed during in-memory or headless test runs, WhiteNoise raised ValueError.
+   - Resolution: In `config/settings.py`, detected testing mode (`'test' in sys.argv or 'pytest' in sys.modules or os.environ.get('PYTEST_CURRENT_TEST')`).
+     When testing, dynamically set `STORAGES["staticfiles"]["BACKEND"] = "django.contrib.staticfiles.storage.StaticFilesStorage"`
+     and `WHITENOISE_AUTOREFRESH = True`.
+     In production/live mode, `whitenoise.storage.CompressedManifestStaticFilesStorage` is strictly
+     preserved with gzip/brotli compression and immutable content-hashed cache busting.
+   - WhiteNoise Warning Elimination: The 25 missing-directory warnings on `staticfiles/` were
+     eliminated by enabling `WHITENOISE_AUTOREFRESH = True` during test runs, and adding
+     `python manage.py collectstatic --no-input` into `.github/workflows/test.yml`.
+   - Brand Emblem References: Fixed hardcoded `/static/img/leaf_emblem.svg` paths in auth templates
+     (`login.html`, `register.html`, `password_reset.html`, `password_reset_confirm.html`)
+     to standard `{% load static %}` and `{% static 'img/leaf_emblem.svg' %}` tags.
+
+20.2 TASK CREATION & DYNAMIC ASSIGNEE SELECTION REPAIR
+------------------------------------------------------
+1. Form Dynamic Choice Validation:
+   - Defect: `TaskCreateForm.__init__` previously hardcoded assignee choices based strictly on
+     `self.user_teams.first()`. When a user selected an alternate team in the UI (e.g. team_beta)
+     and chose an eligible member of that team, form submission rejected the choice with a field
+     validation error because the member was not in team_alpha's queryset.
+   - Fix: Updated `TaskCreateForm.__init__` to inspect `self.data.get('team')` or `self.initial.get('team')`
+     and filter `assignee` choices by that specific team's membership.
+   - Server-Side Cross-Team Invariant: Added rigorous cross-team validation in `TaskCreateForm.clean()`
+     and `TaskEditForm.clean()` to independently verify that `assignee` is an active member of `team`,
+     blocking forged form submissions or IDOR bypass attempts.
+2. Edit Task Notification & Activity Diff Preservation:
+   - Defect: In `task_edit_view`, Django ModelForm's `is_valid()` mutated the in-memory task instance
+     before passing it to `TaskService.update_task`. When `update_task` checked `if task.assignee != assignee:`,
+     it was comparing the mutated in-memory object against itself, skipping the assignee change audit event
+     and notification.
+   - Fix: Updated `TaskService.update_task` to fetch pristine `db_task` from database inside the atomic
+     transaction to accurately diff original vs updated fields, reliably dispatching `ASSIGNMENT_CHANGED`
+     activity logs and `InAppNotification` records.
+3. JavaScript Fetch UX Polish:
+   - Updated `static/js/app.js` dynamic member fetching on `#task-team-select` with explicit loading,
+     empty, and error states, preserving current selections and safely handling network failures.
+
+20.3 TIMEZONE ENFORCEMENT (INDIAN STANDARD TIME)
+-----------------------------------------------
+- Set `TIME_ZONE = 'Asia/Kolkata'` and `USE_TZ = True` in `config/settings.py`.
+- Verified deterministic Indian calendar date logic near UTC midnight (23:00 UTC = 04:30 AM IST next day).
+- Added regression tests in `tasks/tests.py` verifying IST activation and deadline calculations.
+
+20.4 REGRESSION TEST SUITE RESULTS
+----------------------------------
+- Test Suite: 75 tests (14 new regression tests covering static storage, task creation/assignee isolation,
+  dynamic member APIs, brand emblem rendering, and IST timezone transitions).
+- Results:
+  * `py -m pytest`: 75 passed in 1.68s (0 failures, 0 warnings)
+  * `py manage.py test`: 75 passed in 1.28s (0 failures, 0 warnings)
+  * `py manage.py check`: 0 issues identified
+  * `py manage.py makemigrations --check --dry-run`: No changes detected
+  * `pip check`: No broken requirements found
+  * `collectstatic`: 369 assets processed with CompressedManifestStaticFilesStorage successfully.
+
+================================================================================
 END OF PROJECT_CONTEXT.txt
 ================================================================================
 

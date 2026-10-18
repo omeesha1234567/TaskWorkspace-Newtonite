@@ -31,6 +31,10 @@ jobs:
       run: |
         python manage.py makemigrations --check --dry-run
 
+    - name: Verify Static Files Collection
+      run: |
+        python manage.py collectstatic --no-input
+
     - name: Run Pytest Suite with Coverage
       run: |
         python -m pytest --cov=tasks --cov-report=term

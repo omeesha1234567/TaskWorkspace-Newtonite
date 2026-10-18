@@ -199,16 +199,18 @@ class TaskService:
         if not can_edit_task(user, task):
             raise PermissionDenied("You do not have permission to edit this task.")
 
-        # Assignee validation
-        if assignee and not TeamMembership.objects.filter(team=task.team, user=assignee).exists():
-            raise ValidationError({'assignee': f"User '{assignee.username}' is not a member of '{task.team.name}'."})
-
-        # Workflow status transition validation
-        if status != task.status:
-            cls.validate_transition(task.status, status)
-
         with transaction.atomic():
-            # Refresh lock or check version
+            # Retrieve current database state for accurate diffing and notification checks
+            db_task = Task.objects.select_related('team', 'assignee').get(pk=task.pk)
+
+            # Assignee validation against current team
+            if assignee and not TeamMembership.objects.filter(team=db_task.team, user=assignee).exists():
+                raise ValidationError({'assignee': f"User '{assignee.username}' is not a member of '{db_task.team.name}'."})
+
+            # Workflow status transition validation
+            if status != db_task.status:
+                cls.validate_transition(db_task.status, status)
+
             # Execute conditional atomic update on version
             updated_rows = Task.objects.filter(
                 pk=task.pk,
@@ -225,52 +227,51 @@ class TaskService:
             )
 
             if updated_rows == 0:
-                # Reload current task version to inform the user
                 current = Task.objects.get(pk=task.pk)
                 raise StaleUpdateError(
                     f"This task was modified by another user (current version is {current.version}, "
                     f"you submitted version {submitted_version}). Please refresh the page to reconcile changes."
                 )
 
-            # Record changes in activity log
+            # Record changes in activity log by comparing against pristine db_task
             changes = []
             prev_state = {}
             new_state = {}
 
-            if task.title != title:
-                changes.append(f"Title changed from '{task.title}' to '{title}'.")
-                prev_state['title'] = task.title
+            if db_task.title != title:
+                changes.append(f"Title changed from '{db_task.title}' to '{title}'.")
+                prev_state['title'] = db_task.title
                 new_state['title'] = title
-            if task.priority != priority:
-                changes.append(f"Priority changed from {task.get_priority_display()} to {TaskPriority(priority).label}.")
-                prev_state['priority'] = task.priority
+            if db_task.priority != priority:
+                changes.append(f"Priority changed from {db_task.get_priority_display()} to {TaskPriority(priority).label}.")
+                prev_state['priority'] = db_task.priority
                 new_state['priority'] = priority
-            if task.status != status:
-                changes.append(f"Status changed from {task.get_status_display()} to {TaskStatus(status).label}.")
-                prev_state['status'] = task.status
+            if db_task.status != status:
+                changes.append(f"Status changed from {db_task.get_status_display()} to {TaskStatus(status).label}.")
+                prev_state['status'] = db_task.status
                 new_state['status'] = status
-            if task.assignee != assignee:
-                old_assignee_name = task.assignee.username if task.assignee else "Unassigned"
+            if db_task.assignee != assignee:
+                old_assignee_name = db_task.assignee.username if db_task.assignee else "Unassigned"
                 new_assignee_name = assignee.username if assignee else "Unassigned"
                 changes.append(f"Assignee changed from {old_assignee_name} to {new_assignee_name}.")
                 prev_state['assignee'] = old_assignee_name
                 new_state['assignee'] = new_assignee_name
-            if task.due_date != due_date:
-                changes.append(f"Due date changed from {task.due_date} to {due_date}.")
-                prev_state['due_date'] = str(task.due_date) if task.due_date else None
+            if db_task.due_date != due_date:
+                changes.append(f"Due date changed from {db_task.due_date} to {due_date}.")
+                prev_state['due_date'] = str(db_task.due_date) if db_task.due_date else None
                 new_state['due_date'] = str(due_date) if due_date else None
 
             event_type = EventType.TASK_UPDATED
-            if task.status != status:
+            if db_task.status != status:
                 if status == TaskStatus.RESOLVED:
                     event_type = EventType.TASK_RESOLVED
-                elif task.status == TaskStatus.RESOLVED and status == TaskStatus.OPEN:
+                elif db_task.status == TaskStatus.RESOLVED and status == TaskStatus.OPEN:
                     event_type = EventType.TASK_REOPENED
                 else:
                     event_type = EventType.STATUS_CHANGED
-            elif task.assignee != assignee:
+            elif db_task.assignee != assignee:
                 event_type = EventType.ASSIGNMENT_CHANGED
-            elif task.priority != priority:
+            elif db_task.priority != priority:
                 event_type = EventType.PRIORITY_CHANGED
 
             if not changes:
@@ -278,7 +279,7 @@ class TaskService:
 
             ActivityEvent.objects.create(
                 actor=user,
-                team=task.team,
+                team=db_task.team,
                 task=task,
                 event_type=event_type,
                 details="; ".join(changes),
@@ -287,7 +288,7 @@ class TaskService:
             )
 
             # Notifications on reassignment or status change
-            if assignee and assignee != task.assignee and assignee != user:
+            if assignee and assignee != db_task.assignee and assignee != user:
                 NotificationService.create_notification(
                     recipient=assignee,
                     actor=user,
@@ -295,18 +296,18 @@ class TaskService:
                     title=f"Task Assigned: #{task.id}",
                     message=f"{user.get_full_name() or user.username} assigned you to '{title}'.",
                     task=task,
-                    team=task.team,
+                    team=db_task.team,
                     is_urgent=(priority == TaskPriority.URGENT)
                 )
-            if status != task.status and task.assignee and task.assignee != user:
+            if status != db_task.status and db_task.assignee and db_task.assignee != user:
                 NotificationService.create_notification(
-                    recipient=task.assignee,
+                    recipient=db_task.assignee,
                     actor=user,
                     category=NotificationCategory.STATUS,
                     title=f"Task #{task.id} Status: {TaskStatus(status).label}",
-                    message=f"{user.get_full_name() or user.username} updated status on '{task.title}' to {TaskStatus(status).label}.",
+                    message=f"{user.get_full_name() or user.username} updated status on '{db_task.title}' to {TaskStatus(status).label}.",
                     task=task,
-                    team=task.team,
+                    team=db_task.team,
                 )
 
             # Reload updated task from db

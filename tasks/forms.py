@@ -123,23 +123,43 @@ class TaskCreateForm(forms.ModelForm):
             accessible_teams = get_accessible_teams_qs(user)
             self.fields['team'].queryset = accessible_teams
 
-            if initial_team and initial_team in accessible_teams:
-                self.initial['team'] = initial_team
-                # Restrict assignee choices to members of that team
+            selected_team = None
+            # 1. Check submitted form data first (POST)
+            if self.data and self.data.get('team'):
+                try:
+                    submitted_team_id = int(self.data.get('team'))
+                    selected_team = accessible_teams.filter(pk=submitted_team_id).first()
+                except (ValueError, TypeError):
+                    selected_team = None
+
+            # 2. Check explicitly provided initial_team
+            if not selected_team and initial_team and initial_team in accessible_teams:
+                selected_team = initial_team
+
+            # 3. Default to user's first accessible team
+            if not selected_team and accessible_teams.exists():
+                selected_team = accessible_teams.first()
+
+            if selected_team:
+                self.initial['team'] = selected_team
+                # Restrict assignee choices to active members of the selected team
                 self.fields['assignee'].queryset = User.objects.filter(
-                    team_memberships__team=initial_team
-                ).distinct()
-            elif accessible_teams.exists():
-                first_team = accessible_teams.first()
-                self.initial['team'] = first_team
-                self.fields['assignee'].queryset = User.objects.filter(
-                    team_memberships__team=first_team
+                    team_memberships__team=selected_team
                 ).distinct()
             else:
                 self.fields['assignee'].queryset = User.objects.none()
 
         self.fields['assignee'].required = False
         self.fields['assignee'].empty_label = "Unassigned"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        team = cleaned_data.get('team')
+        assignee = cleaned_data.get('assignee')
+        if team and assignee:
+            if not TeamMembership.objects.filter(team=team, user=assignee).exists():
+                self.add_error('assignee', f"The selected user '{assignee.username}' is not a member of team '{team.name}'.")
+        return cleaned_data
 
 
 class TaskEditForm(forms.ModelForm):
@@ -167,6 +187,14 @@ class TaskEditForm(forms.ModelForm):
             self.fields['assignee'].required = False
             self.fields['assignee'].empty_label = "Unassigned"
             self.initial['version'] = self.instance.version
+
+    def clean(self):
+        cleaned_data = super().clean()
+        assignee = cleaned_data.get('assignee')
+        if self.instance and self.instance.team and assignee:
+            if not TeamMembership.objects.filter(team=self.instance.team, user=assignee).exists():
+                self.add_error('assignee', f"The selected user '{assignee.username}' is not a member of team '{self.instance.team.name}'.")
+        return cleaned_data
 
 
 class TeamForm(forms.ModelForm):

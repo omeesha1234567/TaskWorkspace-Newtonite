@@ -8,6 +8,7 @@
 [![Architecture](https://img.shields.io/badge/Architecture-Modular%20Monolith-4A5568?style=for-the-badge&logo=diagram-project&logoColor=white)](#2-system-architecture--design-patterns)
 [![Tests](https://img.shields.io/badge/Automated%20Tests-61%20Passed%20(100%25)-285741?style=for-the-badge&logo=pytest&logoColor=white)](#8-testing-strategy--verification-results)
 [![Coverage](https://img.shields.io/badge/Pytest%20Coverage-74%25-5C8571?style=for-the-badge&logo=codecov&logoColor=white)](#8-testing-strategy--verification-results)
+[![Render](https://img.shields.io/badge/Deployment-Render%20Ready-46E3B7?style=for-the-badge&logo=render&logoColor=black)](#10-render-production-deployment-guide)
 [![CI](https://img.shields.io/badge/GitHub%20Actions-Passing-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](.github/workflows/test.yml)
 
 ---
@@ -82,46 +83,58 @@ The application follows the **Modular Django Monolith** architectural style, dec
 
 ```mermaid
 flowchart TD
-    Browser["Web Browser / Client\n(HTML5, Vanilla CSS & JS)"]
-    WSGI["WSGI / WhiteNoise\n(CompressedManifestStaticFilesStorage)"]
-    URL["URL Dispatcher\n(config/urls.py -> tasks/urls.py)"]
+    Browser["Web Browser / Client<br/>(HTML5, Vanilla CSS & JS)"]
+    WSGI["WSGI / WhiteNoise<br/>(Static & Media Delivery)"]
+    URL["URL Dispatcher<br/>(config/urls.py -> tasks/urls.py)"]
     
     subgraph PresentationLayer ["Presentation & Controller Layer"]
-        Views["View Functions\n(tasks/views.py)"]
-        Forms["Django Forms & Validation\n(tasks/forms.py)"]
-        Context["Context Processors\n(tasks/context_processors.py)"]
+        Views["View Functions<br/>(tasks/views.py)"]
+        Forms["Django Forms & Validation<br/>(tasks/forms.py)"]
+        Context["Context Processors<br/>(tasks/context_processors.py)"]
     end
     
     subgraph SecurityLayer ["Security & Policy Layer"]
-        Permissions["RBAC & Anti-IDOR Policies\n(tasks/permissions.py)"]
+        Permissions["RBAC & Anti-IDOR Policies<br/>(tasks/permissions.py)"]
     end
     
     subgraph DomainLayer ["Domain Service Layer"]
-        TaskSvc["TaskService (CRUD, OCC, State Machine)"]
-        TeamSvc["TeamService (Workspaces, Roster, Roles)"]
-        DocSvc["SharedDocumentService (Canonical Storage)"]
-        InviteSvc["InvitationService (In-App Workflows)"]
-        AuditSvc["AuditTrackingService (Read State & Logs)"]
-        DashSvc["DashboardService (SQL Aggregations)"]
+        TaskSvc["TaskService<br/>(CRUD, OCC, State Machine)"]
+        TeamSvc["TeamService<br/>(Workspaces, Roster, Roles)"]
+        DocSvc["SharedDocumentService<br/>(Canonical Storage)"]
+        InviteSvc["InvitationService<br/>(In-App Workflows)"]
+        AuditSvc["AuditTrackingService<br/>(Read State & Logs)"]
+        DashSvc["DashboardService<br/>(SQL Aggregations)"]
     end
     
     subgraph PersistenceLayer ["Data & Persistence Layer"]
-        ORM["Django ORM Models\n(tasks/models.py)"]
-        DB[("PostgreSQL (Production) /\nSQLite 3 WAL (Development)")]
-        Disk[("Persistent Disk / Media Storage\n(/var/data/media)")]
+        ORM["Django ORM Models<br/>(tasks/models.py)"]
+        DB[("PostgreSQL (Production)<br/>SQLite 3 WAL (Development)")]
+        Disk[("Persistent Disk / Media Storage<br/>(/var/data/media)")]
     end
 
-    Browser <-->|HTTP Requests / HTML Responses| WSGI
+    Browser -->|"HTTP Requests"| WSGI
+    WSGI -->|"HTML Responses"| Browser
     WSGI --> URL
     URL --> Views
     Views --> Forms
     Views --> Permissions
-    Permissions -.->|Guards & Scoped Querysets| Views
-    Views --> TaskSvc & TeamSvc & DocSvc & InviteSvc & AuditSvc & DashSvc
-    Context -.->|Unread Alerts & Invitations| Browser
-    TaskSvc & TeamSvc & DocSvc & InviteSvc & AuditSvc & DashSvc --> ORM
-    ORM <-->|Atomic Transactions (ACID)| DB
-    DocSvc <-->|Sanitized Upload / Stream| Disk
+    Permissions -.->|"Guards & Scoped Querysets"| Views
+    Views --> TaskSvc
+    Views --> TeamSvc
+    Views --> DocSvc
+    Views --> InviteSvc
+    Views --> AuditSvc
+    Views --> DashSvc
+    Context -.->|"Unread Alerts & Invitations"| Browser
+    TaskSvc --> ORM
+    TeamSvc --> ORM
+    DocSvc --> ORM
+    InviteSvc --> ORM
+    AuditSvc --> ORM
+    DashSvc --> ORM
+    ORM -->|"Atomic Transactions (ACID)"| DB
+    DB -->|"Result Sets / Data Snapshots"| ORM
+    DocSvc -->|"Sanitized Upload / Stream"| Disk
 ```
 
 ### Architectural Responsibilities
@@ -289,12 +302,12 @@ sequenceDiagram
     Bob->>Server: GET /tasks/42/edit/ (receives version=1)
     
     Alice->>Server: POST /tasks/42/edit/ (submits changes, version=1)
-    Server->>DB: UPDATE Task WHERE id=42 AND version=1 SET version=2, ...
+    Server->>DB: UPDATE Task WHERE id=42 AND version=1 SET version=2
     DB-->>Server: Rows updated: 1 (SUCCESS)
     Server-->>Alice: Redirect /tasks/42/ (Version 2 Saved)
 
     Bob->>Server: POST /tasks/42/edit/ (submits changes, version=1)
-    Server->>DB: UPDATE Task WHERE id=42 AND version=1 SET version=2, ...
+    Server->>DB: UPDATE Task WHERE id=42 AND version=1 SET version=2
     DB-->>Server: Rows updated: 0 (COLLISION DETECTED)
     Server->>Server: Raise StaleUpdateError
     Server-->>Bob: HTTP 409 Conflict Banner with Side-by-Side Diff
@@ -334,7 +347,7 @@ sequenceDiagram
     Server->>DB: Verify fiona@example.com is registered
     Server->>DB: Insert WorkspaceInvitation (PENDING, expires in 7 days)
     Server->>DB: Insert InAppNotification (Category: INVITATION)
-    Server-->>Admin: Success: "In-app invitation sent to fiona@example.com."
+    Server-->>Admin: Success: In-app invitation sent to fiona@example.com
     
     Invitee->>Server: Visits /updates/ or Dashboard
     Server-->>Invitee: Displays Invitation Banner with Accept / Decline buttons
@@ -391,6 +404,8 @@ Follow these steps to set up and run the application locally on Windows (PowerSh
 * **Python**: Version 3.11, 3.12, or 3.14 (Verified working on Python 3.14.3).
 * **Git**: Installed and configured.
 
+---
+
 ### Step 1: Clone Repository & Create Virtual Environment
 
 ```bash
@@ -404,15 +419,34 @@ python -m venv venv
 # Activate virtual environment
 # Windows (PowerShell):
 .\venv\Scripts\Activate.ps1
-# macOS / Linux:
+# Windows (Command Prompt):
+.\venv\Scripts\activate.bat
+# macOS / Linux (bash/zsh):
 source venv/bin/activate
 ```
+
+> [!TIP]
+> **Windows PowerShell Execution Policy Note**:
+> If activating the virtual environment in PowerShell throws an `Execution_Policies` script restriction error, run:
+> ```powershell
+> Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+> ```
+> and then retry `.\venv\Scripts\Activate.ps1`.
+
+---
 
 ### Step 2: Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
+
+Verify that all dependencies installed cleanly without conflicts:
+```bash
+pip check
+```
+
+---
 
 ### Step 3: Run System Verification & Database Migrations
 
@@ -424,31 +458,67 @@ python manage.py check
 python manage.py migrate
 ```
 
-### Step 4: Seed Realistic Showcase Demo Data
+---
 
-The seeding script is verifiably idempotent and safe to execute multiple times:
+### Step 4: Understanding Static Assets (Development vs Production)
+
+* **Local Development (`runserver`)**: Django automatically discovers and serves static files directly from `static/` (such as `static/css/`, `static/js/`, `static/img/`). You do **not** need to copy or compile assets manually for local development.
+* **Production Build / Deployment (`collectstatic`)**: When preparing for production or deploying to platforms like Render, run:
+  ```bash
+  python manage.py collectstatic --no-input
+  ```
+  This command compiles all assets from `static/` into `STATIC_ROOT` (`staticfiles/`) and generates the immutable hashed manifest (`staticfiles.json`) used by WhiteNoise's `CompressedManifestStaticFilesStorage`.
+
+---
+
+### Step 5: Execute Automated Test Suite
+
+The test suite runs against a dedicated test settings module (`config/test_settings.py`) using standard static storage, requiring zero pre-compiled build artifacts:
+
+```bash
+# Run via native Django test runner (75 passing tests, 0 warnings)
+python manage.py test
+
+# Or run via Pytest with verbose reporting
+python -m pytest -v
+
+# Or run with test coverage report
+python -m pytest --cov=tasks --cov-report=term
+```
+
+---
+
+### Step 6: Seed Showcase Demo Data (Optional)
+
+The seeding script populates realistic, database-backed demonstration records (8 users across 4 teams, work items with different priorities/statuses, in-app notifications, and shared documents). It is verifiably idempotent and safe to execute repeatedly:
 
 ```bash
 python manage.py seed_demo_data
 ```
 
-### Step 5: Execute Automated Test Suite
+> [!NOTE]
+> All demonstration users are intended strictly for local development and testing evaluation.
 
-```bash
-# Run via native Django test runner (61 passing tests)
-python manage.py test
+---
 
-# Or run via Pytest with terminal coverage reporting
-python -m pytest --cov=tasks --cov-report=term
-```
-
-### Step 6: Start Local Development Server
+### Step 7: Start Local Development Server
 
 ```bash
 python manage.py runserver 127.0.0.1:8000
 ```
 
 Open your browser and navigate to: **[http://127.0.0.1:8000/](http://127.0.0.1:8000/)**
+
+---
+
+### Troubleshooting Common Setup Issues
+
+| Issue / Symptom | Underlying Cause | Quick Resolution |
+| :--- | :--- | :--- |
+| `Activate.ps1 cannot be loaded because running scripts is disabled` | PowerShell default execution policy blocks unsigned local scripts. | Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned` in your current PowerShell session. |
+| `Error: That port is already in use` | Another process is bound to port 8000. | Start on an alternate port: `python manage.py runserver 8080`. |
+| `Missing staticfiles manifest entry` during tests | Test runner ran against production manifest storage instead of test storage. | Ensure `manage.py test` or `pytest -v` is run directly; `config/test_settings.py` automatically uses `StaticFilesStorage` for tests. |
+| `No broken requirements found` check fails on Windows | Timezone database is missing. | `requirements.txt` includes `tzdata>=2024.1` providing IANA time zone support for `Asia/Kolkata` on Windows systems. |
 
 ---
 
@@ -472,12 +542,12 @@ The system administrator superuser shares the password: `AdminPass123!`
 
 ## 9. Testing Strategy & Verification Results
 
-The automated test suite verifies all critical behaviors, multi-tenant boundaries, race conditions, file upload security, and in-app invitation mechanics.
+The automated test suite verifies all critical behaviors, multi-tenant boundaries, race conditions, file upload security, task creation, assignee validation, brand asset delivery, and Indian Standard Time (IST) deadlines.
 
 ```
-Total Test Cases:   61 Automated Tests
-Test Pass Rate:     100% Passed (0 Failures, 0 Errors, 0 Silenced Issues)
-Execution Time:     ~2.2 seconds (via MD5 fast test password hasher)
+Total Test Cases:   75 Automated Tests
+Test Pass Rate:     100% Passed (0 Failures, 0 Errors, 0 Warnings)
+Execution Time:     ~1.5 seconds (via MD5 fast test password hasher)
 Code Coverage:      74% across tasks app (100% on models, admin, urls, context_processors)
 CI Pipeline:        GitHub Actions (.github/workflows/test.yml)
 ```
@@ -485,7 +555,7 @@ CI Pipeline:        GitHub Actions (.github/workflows/test.yml)
 ### Test Suite Catalog Breakdown
 
 ```
-tasks/tests.py (61 Tests)
+tasks/tests.py (75 Tests)
 ├── AuthenticationAndSecurityTests (4 tests)
 │   ├── test_unauthenticated_user_redirected_to_login
 │   ├── test_login_success_and_session
@@ -516,13 +586,15 @@ tasks/tests.py (61 Tests)
 │   ├── test_unauthorized_user_cannot_upload_attachment
 │   ├── test_file_download_authorization
 │   └── test_delete_attachment_cleans_up_storage
-├── WorkspaceInvitationTests (6 tests)
+├── WorkspaceInvitationTests (8 tests)
 │   ├── test_admin_can_create_invitation
 │   ├── test_non_admin_cannot_create_invitation
 │   ├── test_duplicate_pending_invitation_prevention
 │   ├── test_invitee_can_accept_invitation
 │   ├── test_unauthorized_user_cannot_accept_someone_elses_invitation
-│   └── test_invitee_can_decline_invitation
+│   ├── test_invitee_can_decline_invitation
+│   ├── test_admin_can_revoke_invitation
+│   └── test_unregistered_email_cannot_receive_invitation
 ├── InAppNotificationTests (3 tests)
 │   ├── test_notification_created_on_task_assignment
 │   ├── test_mark_as_read_and_mark_all_read
@@ -533,35 +605,52 @@ tasks/tests.py (61 Tests)
 │   ├── test_notification_mark_read_view
 │   ├── test_notification_mark_all_read_view
 │   └── test_invitation_accept_flow_via_post
-├── SharedDocumentTests (13 tests)
-│   ├── test_anonymous_user_cannot_access_shared_documents
-│   ├── test_team_admin_can_upload_and_list_documents
-│   ├── test_team_member_can_upload_and_download_document
-│   ├── test_member_can_delete_own_document
-│   ├── test_member_cannot_delete_other_user_document (403)
-│   ├── test_admin_and_manager_can_delete_any_document
-│   ├── test_non_member_cannot_access_or_download_team_documents (403)
-│   ├── test_cross_team_task_association_rejected (ValidationError)
-│   ├── test_removing_user_from_team_revokes_document_access
-│   ├── test_oversized_file_rejected (> 25 MiB ValidationError)
-│   ├── test_dangerous_file_extension_rejected (.exe, .sh, .py)
+├── SharedDocumentValidationAndModelTests (6 tests)
+│   ├── test_upload_general_document_success
+│   ├── test_upload_task_specific_document_success
+│   ├── test_oversized_file_rejected (> 25 MiB)
+│   ├── test_executable_and_dangerous_files_rejected (.exe, .sh, .bat)
 │   ├── test_empty_file_rejected (0-byte file)
-│   └── test_document_deletion_removes_physical_file
-├── TeamInvitationWorkflowTests (6 tests)
+│   └── test_cross_team_task_association_rejected
+├── SharedDocumentPermissionsAndSecurityTests (7 tests)
+│   ├── test_anonymous_user_cannot_access_or_download
+│   ├── test_non_team_member_cannot_view_or_download (403)
+│   ├── test_team_member_can_view_and_download
+│   ├── test_member_can_delete_own_document
+│   ├── test_member_cannot_delete_another_users_document (403)
+│   ├── test_manager_and_admin_can_delete_any_team_document
+│   └── test_document_search_is_team_isolated
+├── TeamInvitationWorkflowVerificationTests (4 tests)
 │   ├── test_invitation_creation_is_in_app_only_and_sends_no_email
-│   ├── test_admin_can_create_invitation_and_notification_is_dispatched
-│   ├── test_member_cannot_create_invitation
-│   ├── test_intended_recipient_can_accept_invitation
-│   ├── test_wrong_user_cannot_accept_invitation
-│   └── test_decline_invitation_does_not_create_membership
-└── AuditReadTrackingTests (7 tests)
-    ├── test_new_activity_shows_unread_indicator
-    ├── test_visiting_activity_page_marks_as_read
-    ├── test_new_event_after_visit_makes_indicator_reappear
-    ├── test_audit_read_state_is_independent_per_user
-    ├── test_activity_from_inaccessible_team_does_not_trigger_indicator
-    ├── test_visiting_updates_centre_does_not_clear_audit_indicator
-    └── test_filtered_activity_view_does_not_clear_newer_unseen_activity
+│   ├── test_accept_invitation_creates_membership_atomically
+│   ├── test_decline_invitation_does_not_create_membership
+│   └── test_unauthorized_user_cannot_accept_another_invitation
+├── AuditReadIndicatorTrackingTests (1 test)
+│   └── test_audit_indicator_lifecycle_and_isolation
+├── SharedDocumentViewAndEndpointIntegrationTests (6 tests)
+│   ├── test_documents_index_view_redirects_to_first_team
+│   ├── test_upload_view_via_post_success
+│   ├── test_delete_view_post_forbidden_for_non_member
+│   ├── test_invitation_cannot_be_accepted_twice
+│   ├── test_expired_invitation_cannot_be_accepted
+│   └── test_revoked_invitation_cannot_be_accepted
+├── StaticFilesAndBrandAssetsRegressionTests (5 tests)
+│   ├── test_brand_leaf_emblem_static_url_resolves
+│   ├── test_cityscape_art_static_url_resolves
+│   ├── test_base_template_renders_static_assets_safely
+│   ├── test_auth_pages_render_with_static_brand_emblem
+│   └── test_production_compressed_manifest_storage_workflow
+├── TaskCreationAndAssigneeRegressionTests (6 tests)
+│   ├── test_task_create_form_populates_assignee_for_submitted_team
+│   ├── test_task_create_form_rejects_cross_team_assignee
+│   ├── test_task_creation_end_to_end_via_post
+│   ├── test_task_creation_unassigned_success
+│   ├── test_task_edit_change_assignee_dispatches_notification_and_audit
+│   └── test_api_team_members_returns_members_and_enforces_auth
+└── IndianStandardTimeAndDeadlineTests (3 tests)
+    ├── test_configured_timezone_is_asia_kolkata
+    ├── test_timezone_active_is_asia_kolkata
+    └── test_indian_calendar_date_near_utc_midnight
 ```
 
 ---
@@ -661,7 +750,7 @@ databases:
 ├── PROJECT_ARCHITECTURE.md       # High-level architecture, request flows & Mermaid diagrams
 ├── PROJECT_CONTEXT.txt           # Authoritative living technical context file
 ├── README.md                     # [THIS FILE] Primary assessment documentation & runbook
-├── TESTING.md                    # Testing philosophy, 61 test catalog & coverage reports
+├── TESTING.md                    # Testing philosophy, test catalog & coverage reports
 ├── build.sh                      # Render automated deployment build script
 ├── render.yaml                   # Render Blueprint Infrastructure-as-Code manifest
 ├── requirements.txt              # Production and testing runtime dependencies
@@ -676,6 +765,7 @@ databases:
 ├── config/                       # Project configuration package
 │   ├── asgi.py                   # ASGI application callable
 │   ├── settings.py               # Django settings (WhiteNoise, dj-database-url, RBAC)
+│   ├── test_settings.py          # Dedicated automated test configuration (StaticFilesStorage)
 │   ├── urls.py                   # Root URL dispatcher
 │   └── wsgi.py                   # WSGI application callable
 │
@@ -700,7 +790,7 @@ databases:
 │   ├── models.py                 # Domain models (Team, Task, SharedDocument, etc.)
 │   ├── permissions.py            # RBAC authorization guards and anti-IDOR queryset helpers
 │   ├── services.py               # Domain services (TaskService, SharedDocumentService, etc.)
-│   ├── tests.py                  # Automated test suite (61 tests, 100% pass rate)
+│   ├── tests.py                  # Automated test suite (75 tests, 100% pass rate)
 │   ├── urls.py                   # Application URL patterns (35+ named routes)
 │   ├── views.py                  # View controllers (PRG redirects, conflict resolution)
 │   ├── management/

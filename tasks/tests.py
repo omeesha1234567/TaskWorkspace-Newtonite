@@ -1,4 +1,5 @@
-from datetime import timedelta
+from datetime import timedelta, date, datetime, timezone as dt_timezone
+from unittest.mock import patch
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -7,6 +8,10 @@ from django.core.exceptions import ValidationError, PermissionDenied
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core import mail
 from django.db import IntegrityError, transaction
+from django.templatetags.static import static
+from django.template.loader import render_to_string
+from django.conf import settings
+from tasks.forms import TaskCreateForm, TaskEditForm
 
 from tasks.models import (
     Team,
@@ -419,6 +424,7 @@ class TaskAttachmentTests(TaskTrackerBaseTestCase):
         # Team member Alice can download
         resp_alice = self.client_alice.get(reverse('task_attachment_download', kwargs={'task_pk': self.task.pk, 'attachment_pk': attachment.pk}))
         self.assertEqual(resp_alice.status_code, 200)
+        resp_alice.close()
 
         # Non-member Eve cannot download
         resp_eve = self.client_eve.get(reverse('task_attachment_download', kwargs={'task_pk': self.task.pk, 'attachment_pk': attachment.pk}))
@@ -776,6 +782,7 @@ class SharedDocumentPermissionsAndSecurityTests(TaskTrackerBaseTestCase):
 
         down_resp = self.client_charlie.get(reverse('shared_document_download', kwargs={'pk': self.doc_alice.pk}))
         self.assertEqual(down_resp.status_code, 200)
+        down_resp.close()
 
     def test_non_team_member_cannot_view_or_download(self):
         resp = self.client_eve.get(reverse('team_documents', kwargs={'pk': self.team_alpha.pk}))
@@ -988,6 +995,238 @@ class SharedDocumentViewAndEndpointIntegrationTests(TaskTrackerBaseTestCase):
         InvitationService.revoke_invitation(self.alice, invitation.pk)
         with self.assertRaises(ValidationError):
             InvitationService.accept_invitation(self.eve, invitation.pk)
+
+
+class StaticFilesAndBrandAssetsRegressionTests(TaskTrackerBaseTestCase):
+    """
+    Verifies that brand emblem, cityscape hero art, CSS, and JS static assets resolve
+    cleanly without manifest errors across templates and storage configurations.
+    """
+
+    def test_brand_leaf_emblem_static_url_resolves(self):
+        url = static('img/leaf_emblem.svg')
+        self.assertTrue(url.startswith('/static/'))
+        self.assertIn('leaf_emblem', url)
+
+    def test_cityscape_art_static_url_resolves(self):
+        url = static('img/cityscape_art.svg')
+        self.assertTrue(url.startswith('/static/'))
+        self.assertIn('cityscape_art', url)
+
+    def test_base_template_renders_static_assets_safely(self):
+        rendered = render_to_string('base.html', {'user': self.alice, 'title': 'Test Page'})
+        self.assertIn('leaf_emblem.svg', rendered)
+        self.assertIn('app.css', rendered)
+        self.assertIn('app.js', rendered)
+
+    def test_auth_pages_render_with_static_brand_emblem(self):
+        anon_client = Client()
+        for url_name in ['login', 'register', 'password_reset']:
+            resp = anon_client.get(reverse(url_name))
+            self.assertEqual(resp.status_code, 200)
+            self.assertContains(resp, 'leaf_emblem.svg')
+
+    def test_production_compressed_manifest_storage_workflow(self):
+        from whitenoise.storage import CompressedManifestStaticFilesStorage
+        storage = CompressedManifestStaticFilesStorage()
+        # Verify storage can compute or locate stored name for brand assets without crashing
+        leaf_url = storage.url('img/leaf_emblem.svg')
+        self.assertTrue(leaf_url.startswith('/static/'))
+        city_url = storage.url('img/cityscape_art.svg')
+        self.assertTrue(city_url.startswith('/static/'))
+
+
+class TaskCreationAndAssigneeRegressionTests(TaskTrackerBaseTestCase):
+    """
+    Verifies task creation, dynamic team/assignee selection, validation,
+    cross-team isolation, and assignment updates.
+    """
+
+    def test_task_create_form_populates_assignee_for_submitted_team(self):
+        # Alice is in team_alpha and team_beta. Charlie is only in team_beta.
+        TeamMembership.objects.create(user=self.alice, team=self.team_beta, role=TeamRole.MEMBER)
+        # When team_beta is submitted in POST data, Charlie must be a valid assignee choice.
+        form = TaskCreateForm(
+            data={
+                'title': 'Frontend Optimization',
+                'description': 'Speed up asset bundle',
+                'team': str(self.team_beta.id),
+                'priority': TaskPriority.HIGH,
+                'status': TaskStatus.OPEN,
+                'assignee': str(self.charlie.id),
+            },
+            user=self.alice
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['assignee'], self.charlie)
+
+    def test_task_create_form_rejects_cross_team_assignee(self):
+        # Alice is in team_alpha. Eve is NOT in team_alpha.
+        # Submitting team_alpha with Eve as assignee must fail validation.
+        form = TaskCreateForm(
+            data={
+                'title': 'Core Invariant Test',
+                'team': str(self.team_alpha.id),
+                'priority': TaskPriority.MEDIUM,
+                'status': TaskStatus.OPEN,
+                'assignee': str(self.eve.id),
+            },
+            user=self.alice
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('assignee', form.errors)
+
+    def test_task_creation_end_to_end_via_post(self):
+        # Alice creates a task in team_alpha assigned to Bob via POST to /tasks/new/
+        resp = self.client_alice.post(reverse('task_create'), {
+            'title': 'End to End Integration Task',
+            'description': 'Verified by browser & test client',
+            'team': str(self.team_alpha.id),
+            'priority': TaskPriority.URGENT,
+            'status': TaskStatus.OPEN,
+            'assignee': str(self.bob.id),
+            'due_date': '2026-10-25',
+        })
+        self.assertEqual(resp.status_code, 302)
+        task = Task.objects.filter(title='End to End Integration Task').first()
+        self.assertIsNotNone(task)
+        self.assertEqual(task.team, self.team_alpha)
+        self.assertEqual(task.assignee, self.bob)
+        self.assertEqual(task.creator, self.alice)
+        self.assertEqual(task.priority, TaskPriority.URGENT)
+
+        # Verify activity event was created
+        event = ActivityEvent.objects.filter(task=task, event_type=EventType.TASK_CREATED).first()
+        self.assertIsNotNone(event)
+        self.assertEqual(event.actor, self.alice)
+
+        # Verify notification was dispatched to assignee Bob
+        notif = InAppNotification.objects.filter(recipient=self.bob, task=task).first()
+        self.assertIsNotNone(notif)
+        self.assertEqual(notif.category, NotificationCategory.ASSIGNMENT)
+
+    def test_task_creation_unassigned_success(self):
+        # Alice creates a task without an assignee
+        resp = self.client_alice.post(reverse('task_create'), {
+            'title': 'Backlog Unassigned Item',
+            'description': 'Awaiting sprint triage',
+            'team': str(self.team_alpha.id),
+            'priority': TaskPriority.LOW,
+            'status': TaskStatus.OPEN,
+            'assignee': '',
+        })
+        self.assertEqual(resp.status_code, 302)
+        task = Task.objects.filter(title='Backlog Unassigned Item').first()
+        self.assertIsNotNone(task)
+        self.assertIsNone(task.assignee)
+
+    def test_task_edit_change_assignee_dispatches_notification_and_audit(self):
+        task = TaskService.create_task(
+            user=self.alice,
+            team=self.team_alpha,
+            title="Reassignment Test Item",
+            assignee=self.alice
+        )
+        # Edit task to reassign to Bob
+        resp = self.client_alice.post(reverse('task_edit', kwargs={'pk': task.pk}), {
+            'title': task.title,
+            'description': task.description,
+            'priority': task.priority,
+            'status': task.status,
+            'assignee': str(self.bob.id),
+            'version': task.version,
+        })
+        self.assertEqual(resp.status_code, 302)
+        task.refresh_from_db()
+        self.assertEqual(task.assignee, self.bob)
+        self.assertEqual(task.version, 2)
+
+        # Verify activity event
+        audit = ActivityEvent.objects.filter(task=task, event_type=EventType.ASSIGNMENT_CHANGED).first()
+        self.assertIsNotNone(audit)
+        self.assertIn("Assignee changed from alice to bob", audit.details)
+
+        # Verify notification to Bob
+        notif = InAppNotification.objects.filter(recipient=self.bob, task=task).first()
+        self.assertIsNotNone(notif)
+
+    def test_api_team_members_returns_members_and_enforces_auth(self):
+        # Alice belongs to team_alpha -> 200 with members list
+        resp = self.client_alice.get(reverse('api_team_members', kwargs={'team_id': self.team_alpha.id}))
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn('members', data)
+        usernames = [m['username'] for m in data['members']]
+        self.assertIn('alice', usernames)
+        self.assertIn('bob', usernames)
+
+        # Eve does NOT belong to team_alpha -> 403 Forbidden
+        resp_eve = self.client_eve.get(reverse('api_team_members', kwargs={'team_id': self.team_alpha.id}))
+        self.assertEqual(resp_eve.status_code, 403)
+
+
+class IndianStandardTimeAndDeadlineTests(TaskTrackerBaseTestCase):
+    """
+    Verifies that the application strictly enforces Asia/Kolkata (Indian Standard Time)
+    for dates, deadlines, overdue calculation, and timestamp formatting.
+    """
+
+    def test_configured_timezone_is_asia_kolkata(self):
+        self.assertEqual(settings.TIME_ZONE, 'Asia/Kolkata')
+        self.assertTrue(settings.USE_TZ)
+
+    def test_timezone_active_is_asia_kolkata(self):
+        self.assertEqual(timezone.get_current_timezone_name(), 'Asia/Kolkata')
+
+    def test_indian_calendar_date_near_utc_midnight(self):
+        """
+        At 20:00:00 UTC on October 18, 2026:
+        - In UTC, the date is October 18, 2026.
+        - In India (UTC+5:30), the time is 01:30:00 on October 19, 2026.
+        Verify that timezone.localdate() returns Oct 19 and task overdue logic
+        correctly follows Indian local calendar date.
+        """
+        # Mock UTC time to 2026-10-18 20:00:00 UTC
+        utc_moment = datetime(2026, 10, 18, 20, 0, 0, tzinfo=dt_timezone.utc)
+
+        with patch('django.utils.timezone.now', return_value=utc_moment):
+            # In Asia/Kolkata, today MUST be 2026-10-19
+            local_today = timezone.localdate()
+            self.assertEqual(local_today, date(2026, 10, 19))
+
+            # Task with due date 2026-10-18:
+            # Under UTC, it would be 'due today' (not overdue).
+            # Under Asia/Kolkata, today is already Oct 19, so it IS overdue!
+            task_yesterday = Task.objects.create(
+                team=self.team_alpha,
+                creator=self.alice,
+                title="IST Midnight Edge Overdue",
+                due_date=date(2026, 10, 18),
+                status=TaskStatus.OPEN
+            )
+            self.assertTrue(task_yesterday.is_overdue)
+
+            # Task with due date 2026-10-19:
+            # In Asia/Kolkata, it is due today!
+            task_today = Task.objects.create(
+                team=self.team_alpha,
+                creator=self.alice,
+                assignee=self.alice,
+                title="IST Midnight Edge Due Today",
+                due_date=date(2026, 10, 19),
+                status=TaskStatus.OPEN
+            )
+            self.assertFalse(task_today.is_overdue)
+
+            # Notification scanner should generate a "Due Today" alert for task_today
+            NotificationService.check_and_create_deadline_alerts(self.alice)
+            notif = InAppNotification.objects.filter(
+                recipient=self.alice,
+                task=task_today,
+                category=NotificationCategory.DEADLINE
+            ).first()
+            self.assertIsNotNone(notif)
+            self.assertIn("Due Today", notif.title)
 
 
 

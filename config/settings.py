@@ -109,16 +109,42 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# Fast password hasher for test runner efficiency (supports manage.py test and pytest)
-if 'test' in sys.argv or 'pytest' in sys.modules or os.environ.get('PYTEST_CURRENT_TEST'):
+# Detect test environment (supports manage.py test, pytest, and CI runners)
+TESTING = 'test' in sys.argv or 'pytest' in sys.modules or bool(os.environ.get('PYTEST_CURRENT_TEST'))
+
+if TESTING:
+    # Fast password hasher for test runner efficiency
     PASSWORD_HASHERS = [
         'django.contrib.auth.hashers.MD5PasswordHasher',
     ]
+    # In test runner, use standard StaticFilesStorage and autorefresh to avoid requiring
+    # a pre-collected staticfiles.json manifest or raising warnings if collectstatic has not been run.
+    WHITENOISE_AUTOREFRESH = True
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+    STATICFILES_STORAGE = "django.contrib.staticfiles.storage.StaticFilesStorage"
+else:
+    # WhiteNoise production compressed storage with manifest hash cache-busting
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
+    STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 
-# Internationalization
+# Internationalization (Enforcing Indian Standard Time)
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 USE_I18N = True
 USE_TZ = True
 
@@ -126,16 +152,6 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-
-# WhiteNoise production compressed storage
-STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    },
-}
 
 # Media Files (Task Attachments & Shared Document Library)
 # Configurable via MEDIA_ROOT env var to support Render Persistent Disk mounts (e.g. /var/data/media)
