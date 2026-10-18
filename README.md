@@ -3,15 +3,6 @@
 > **Production-Grade, Multi-Tenant Operations Work-Item Management Platform**  
 > Engineered with Python & Django for the **Newtonite Software Engineering Challenge: "Operations Under Pressure"**.
 
-## 🚀 Live Demo
-
-**Live Application:** [Open Newtonite Task Tracker](http://13.61.21.114/login/)    || http://13.61.21.114/login/
-
-**Demo Credentials**
-- **Username:** `alice`
-- **Password:** `Password123!`
-- **Role:** Team Admin
-
 [![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Django](https://img.shields.io/badge/Django-6.0%20%2F%205.1-092E20?style=for-the-badge&logo=django&logoColor=white)](https://djangoproject.com)
 [![Architecture](https://img.shields.io/badge/Architecture-Modular%20Monolith-4A5568?style=for-the-badge&logo=diagram-project&logoColor=white)](#2-system-architecture--design-patterns)
@@ -21,6 +12,14 @@
 [![CI](https://img.shields.io/badge/GitHub%20Actions-Passing-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](.github/workflows/test.yml)
 
 ---
+## 🚀 Live Demo
+
+**Live Application:** [Open Newtonite Task Tracker](http://13.61.21.114/login/)    || http://13.61.21.114/login/
+
+**Demo Credentials**
+- **Username:** `alice`
+- **Password:** `Password123!`
+- **Role:** Team Admin
 
 ## Executive Summary
 
